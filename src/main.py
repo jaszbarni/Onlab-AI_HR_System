@@ -13,7 +13,7 @@ except FileNotFoundError:
 
 # Felhasználó inicializálása (Hardcoded)
 # Ez a rész később lecserélhető az st.login() hívásra
-test_user = User("Teszt", "Elek", "Manager", "HR", "leader@example.com")
+test_user = User("Teszt", "Elek", "Leader", "leader@example.com", "")
 
 st.session_state.user = test_user
 
@@ -32,5 +32,5 @@ with st.sidebar:
 
 st.title("HR System", text_alignment="center")
 
-if st.button(label="Permission manager", width="content", icon_position="right", type="primary"):
+if st.button(label="Permission manager", width="content", icon_position="right", type="secondary"):
     st.switch_page("pages/Permissions.py")

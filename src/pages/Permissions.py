@@ -1,5 +1,5 @@
 import streamlit as st
-from database_manager import get_all_employees, update_employee_role, ROLES, check_permission, delete_employee, update_employee_group
+from database_manager import get_all_employees, update_employee_role, ROLES, check_permission, delete_employee, add_group_to_employee, remove_group_from_employee, get_all_groups, add_group, delete_group
 
 st.set_page_config(layout="wide")
 
@@ -11,14 +11,101 @@ except FileNotFoundError:
 
 st.title("Permissions", text_alignment="center")
 
-# Initialize session state for edit mode
-if "edit_mode" not in st.session_state:
-    st.session_state.edit_mode = {}
+# Dialog for managing all groups
+@st.dialog("Manage Groups")
+def group_manager():
+    st.write("**Create a new group:**")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        custom_group = st.text_input(
+            "New group name",
+            key="new_group_input",
+            label_visibility="collapsed",
+            placeholder="Enter new group name"
+        )
+    with col2:
+        if st.button("Create", key="create_group_btn", use_container_width=True):
+            if custom_group.strip():
+                add_group(custom_group.strip())
+                st.success(f"Group '{custom_group.strip()}' created!")
+                st.rerun()
+            else:
+                st.error("Group name cannot be empty")
+    
+    st.divider()
+    
+    st.write("**All Groups:**")
+    all_groups = get_all_groups()
+    
+    if all_groups:
+        for group in all_groups:
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.write(f"• {group}")
+            with col2:
+                if st.button("Delete", key=f"delete_group_{group}", use_container_width=True):
+                    delete_group(group)
+                    st.success(f"Group '{group}' deleted!")
+                    st.rerun()
+    else:
+        st.info("No groups created yet")
+
+
+if check_permission("update"):
+    col1, col2 = st.columns([4, 1])
+    with col2:
+        if st.button("Manage Groups", type="secondary", use_container_width=True):
+            group_manager()
+
+
+# Dialog for editing employee groups
+@st.dialog("Edit Employee Groups")
+def edit_groups_dialog(employee_id, employee_name, current_groups):
+    all_groups = get_all_groups()
+    
+    st.write(f"Managing groups for **{employee_name}**")
+    st.divider()
+    
+    # Display current groups
+    st.subheader("Current Groups")
+    if current_groups:
+        for group in current_groups:
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.write(f"• {group}")
+            with col2:
+                if st.button("Remove", key=f"remove_{employee_id}_{group}", use_container_width=True):
+                    remove_group_from_employee(employee_id, group)
+                    st.rerun()
+        
+    st.divider()
+    
+    # Add new group
+    st.subheader("Add New Group")
+    available_groups = [g for g in all_groups if g not in current_groups]
+    
+    # Option 1: Select from existing groups
+    if available_groups:
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            new_group = st.selectbox(
+                "Select a group",
+                options=available_groups,
+                key=f"available_groups_{employee_id}",
+                label_visibility="collapsed"
+            )
+        with col2:
+            if st.button("Add", key=f"add_btn_{employee_id}", use_container_width=True):
+                add_group_to_employee(employee_id, new_group)
+                st.rerun()
+    else:
+        st.info("No groups available")
+
 
 employees = get_all_employees()
 st.subheader("Employees")
 
-col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+col1, col2, col3, col4, col5, col6 = st.columns(6)
 with col1:
     st.caption("**ID**", text_alignment="left")
 with col2:
@@ -26,16 +113,15 @@ with col2:
 with col3:
     st.caption("**Email**", text_alignment="left")
 with col4:
-    st.caption("**Group**", text_alignment="left")
-if check_permission("update"):
-    with col5:
-        st.caption("**Edit**", text_alignment="left")
-with col6:
+    st.caption("**Groups**", text_alignment="left")
+with col5:
     st.caption("**Role**", text_alignment="center")
+with col6:
+    st.caption("**Actions**", text_alignment="center")
 
 if employees:
     for employee in employees:
-        col1, col2, col3, col4, col5, col6, col7 = st.columns(7)
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
         with col1:
             st.write(f"{employee['id']}")
         with col2:
@@ -43,21 +129,12 @@ if employees:
         with col3:
             st.write(employee['email'])
         with col4:
-            # Check if in edit mode for this employee
-            if st.session_state.edit_mode.get(employee['id'], False):
-                new_group = st.text_input("Group", value=employee['group'], key=f"group_{employee['id']}", label_visibility="collapsed")
-                if new_group != employee['group']:
-                    update_employee_group(employee['id'], new_group)
-                    st.session_state.edit_mode[employee['id']] = False
-                    st.rerun()
+            if employee['groups']:
+                for group in employee['groups']:
+                    st.write(f"  • {group}")
             else:
-                st.write(employee['group'])
-        if check_permission("update"):
-            with col5:
-                if st.button(label="✏️", key=f"edit_{employee['id']}"):
-                    st.session_state.edit_mode[employee['id']] = not st.session_state.edit_mode.get(employee['id'], False)
-                    st.rerun()
-        with col6:
+                st.write("No groups assigned")
+        with col5:
             disabled = True
             if check_permission("update"):
                 disabled = False
@@ -73,10 +150,14 @@ if employees:
             if new_role != employee['role']:
                 update_employee_role(employee['id'], new_role)
                 st.rerun()
-        if check_permission("delete"):
-            with col7:
-                st.button(label="❌", key=f"delete_{employee['id']}", on_click=delete_employee, args=(employee['id']))
-
-
+        with col6:
+            col_edit, col_delete = st.columns(2)
+            if check_permission("update"):
+                with col_edit:
+                    if st.button(label="✏️", key=f"edit_{employee['id']}"):
+                        edit_groups_dialog(employee['id'], f"{employee['first_name']} {employee['last_name']}", employee['groups'])
+            if check_permission("delete"):
+                with col_delete:
+                    st.button(label="❌", key=f"delete_{employee['id']}", on_click=delete_employee, args=(employee['id'],))
 else:
     st.info("No employees found.")

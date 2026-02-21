@@ -1,6 +1,6 @@
 /* Make the app background purple and text white */
 [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
-    background-color: purple;
+    background-color: #a265af94;
 }
 
 body, h1, h2, h3, h4, h5, h6, .st-write, p {
