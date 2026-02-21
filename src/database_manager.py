@@ -39,7 +39,7 @@ def init_db():
                 first_name TEXT NOT NULL,
                 last_name TEXT NOT NULL,
                 email TEXT NOT NULL,
-                "group" TEXT NOT NULL,
+                "group" TEXT,
                 role TEXT NOT NULL)""")
     conn.commit()
     conn.close()
@@ -87,6 +87,15 @@ def update_employee_role(employee_id, new_role):
     cursor.execute('UPDATE employees SET role = ? WHERE id = ?', (new_role, employee_id))
     conn.commit()
     conn.close()
+
+def update_employee_group(employee_id, new_group):
+    """Update an employee's group in the database."""
+    conn = sqlite3.connect("personal_data.db")
+    cursor = conn.cursor()
+    cursor.execute('UPDATE employees SET "group" = ? WHERE id = ?', (new_group, employee_id))
+    conn.commit()
+    conn.close()
+
 
 def delete_employee(employee_id):
     """Delete an employee from the database."""
