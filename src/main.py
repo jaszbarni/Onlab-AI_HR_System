@@ -33,4 +33,6 @@ with st.sidebar:
 st.title("HR System", text_alignment="center")
 
 if st.button(label="Permission manager", width="content", icon_position="right", type="secondary"):
-    st.switch_page("pages/Permissions.py")
+    st.switch_page("pages/1_Permissions.py")
+if st.button(label="Form templates", width="content", icon_position="right", type="secondary"):
+    st.switch_page("pages/3_Forms.py")
