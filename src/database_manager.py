@@ -1,25 +1,17 @@
 import streamlit as st
 import sqlite3
+import classes.user_class as User
+
 
 # --- User Management & Permissions ---
 # Role definíciók és a hozzájuk tartozó jogosultságok (CRUD)
 ROLES = {
-    "Leader": ["create", "read", "update", "delete"],
+    "Vezető": ["create", "read", "update", "delete"],
     "Manager": ["create", "read", "update"],
-    "Employee": ["read"]
+    "Back office": ["read"],
+    "Fizikai": []
 }
 
-class User:
-    def __init__(self, first_name, last_name, role, email, group=None):
-        self.first_name = first_name
-        self.last_name = last_name
-        self.role = role
-        self.group = group
-        self.email = email
-
-    def __str__(self):
-        group_str = f", {self.group} group" if self.group else ""
-        return f"{self.first_name} {self.last_name} ({self.role}){group_str}, email: {self.email}"
 
 
 def check_permission(permission):
@@ -29,6 +21,7 @@ def check_permission(permission):
     else:
         st.error("Invalid user role.")
         return False
+    
 
 # --- Database Management ---
 
@@ -41,7 +34,7 @@ def init_db():
                 first_name TEXT NOT NULL,
                 last_name TEXT NOT NULL,
                 email TEXT NOT NULL,
-                role TEXT NOT NULL)""")
+                role TEXT)""")
     # Create groups table
     cursor.execute("""CREATE TABLE IF NOT EXISTS groups (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,13 +46,22 @@ def init_db():
                 PRIMARY KEY (employee_id, group_id),
                 FOREIGN KEY (employee_id) REFERENCES employees(id),
                 FOREIGN KEY (group_id) REFERENCES groups(id))""")
-    # Create forms table
-    cursor.execute("""CREATE TABLE IF NOT EXISTS forms (
+    # Create campaigns table
+    cursor.execute("""CREATE TABLE IF NOT EXISTS campaigns (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 description TEXT,
                 created_by TEXT NOT NULL,
                 created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+    # Create forms table
+    cursor.execute("""CREATE TABLE IF NOT EXISTS forms (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT,
+                campaign_id INTEGER,
+                created_by TEXT NOT NULL,
+                created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE)""")
     # Create questions table
     cursor.execute("""CREATE TABLE IF NOT EXISTS questions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,10 +72,54 @@ def init_db():
                 max_value INTEGER,
                 question_order INTEGER,
                 FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE)""")
+    # Create form responses table
+    cursor.execute("""CREATE TABLE IF NOT EXISTS form_responses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                form_id INTEGER NOT NULL,
+                submitted_by TEXT NOT NULL,
+                submitted_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE)""")
+    # Create response answers table
+    cursor.execute("""CREATE TABLE IF NOT EXISTS response_answers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                response_id INTEGER NOT NULL,
+                question_id INTEGER NOT NULL,
+                answer TEXT NOT NULL,
+                FOREIGN KEY (response_id) REFERENCES form_responses(id) ON DELETE CASCADE,
+                FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE)""")
     conn.commit()
     conn.close()
 
+def migrate_db():
+    """Apply database migrations."""
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    
+    try:
+        # Check if campaign_id column exists in forms table
+        cursor.execute("PRAGMA table_info(forms)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        if "campaign_id" not in columns:
+            # Add campaign_id column if it doesn't exist
+            cursor.execute("ALTER TABLE forms ADD COLUMN campaign_id INTEGER DEFAULT NULL")
+            conn.commit()
+        
+        if "assigned_group" not in columns:
+            # Add assigned_group column if it doesn't exist
+            cursor.execute("ALTER TABLE forms ADD COLUMN assigned_group TEXT DEFAULT NULL")
+            conn.commit()
+    except Exception as e:
+        # If migration fails, silently continue
+        try:
+            conn.rollback()
+        except:
+            pass
+    finally:
+        conn.close()
+
 init_db()
+migrate_db()
 
 def add_employee(user: User):
     conn = sqlite3.connect("data.db")
@@ -202,14 +248,62 @@ def delete_employee(employee_id):
     conn.close()
 
 
+# --- Campaign Management ---
+
+def create_campaign(name, description, created_by):
+    """Create a new campaign."""
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO campaigns (name, description, created_by) VALUES (?, ?, ?)',
+                   (name, description, created_by))
+    campaign_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return campaign_id
+
+def get_all_campaigns():
+    """Get all campaigns."""
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, name, description, created_by, created_date FROM campaigns ORDER BY created_date DESC')
+    campaigns = cursor.fetchall()
+    conn.close()
+    return campaigns
+
+def get_campaign_by_id(campaign_id):
+    """Get a specific campaign by ID."""
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, name, description, created_by, created_date FROM campaigns WHERE id = ?', (campaign_id,))
+    campaign = cursor.fetchone()
+    conn.close()
+    return campaign
+
+def update_campaign(campaign_id, name, description):
+    """Update a campaign's name and description."""
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    cursor.execute('UPDATE campaigns SET name = ?, description = ? WHERE id = ?', (name, description, campaign_id))
+    conn.commit()
+    conn.close()
+
+def delete_campaign(campaign_id):
+    """Delete a campaign and all its forms."""
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    # Forms and their questions will be deleted automatically due to CASCADE
+    cursor.execute('DELETE FROM campaigns WHERE id = ?', (campaign_id,))
+    conn.commit()
+    conn.close()
+
 # --- Form Management ---
 
-def create_form(name, description, created_by):
+def create_form(name, description, created_by, campaign_id=None):
     """Create a new form."""
     conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
-    cursor.execute('INSERT INTO forms (name, description, created_by) VALUES (?, ?, ?)',
-                   (name, description, created_by))
+    cursor.execute('INSERT INTO forms (name, description, created_by, campaign_id) VALUES (?, ?, ?, ?)',
+                   (name, description, created_by, campaign_id))
     form_id = cursor.lastrowid
     conn.commit()
     conn.close()
@@ -220,6 +314,15 @@ def get_all_forms():
     conn = sqlite3.connect("data.db")
     cursor = conn.cursor()
     cursor.execute('SELECT id, name, description, created_by, created_date FROM forms ORDER BY created_date DESC')
+    forms = cursor.fetchall()
+    conn.close()
+    return forms
+
+def get_forms_by_campaign(campaign_id):
+    """Get all forms for a specific campaign."""
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, name, description, created_by, created_date FROM forms WHERE campaign_id = ? ORDER BY created_date DESC', (campaign_id,))
     forms = cursor.fetchall()
     conn.close()
     return forms
@@ -249,6 +352,23 @@ def delete_form(form_id):
     cursor.execute('DELETE FROM forms WHERE id = ?', (form_id,))
     conn.commit()
     conn.close()
+
+def assign_group_to_form(form_id, group_name):
+    """Assign a group to a form."""
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    cursor.execute('UPDATE forms SET assigned_group = ? WHERE id = ?', (group_name, form_id))
+    conn.commit()
+    conn.close()
+
+def get_assigned_group(form_id):
+    """Get the assigned group for a form."""
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    cursor.execute('SELECT assigned_group FROM forms WHERE id = ?', (form_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else None
 
 def add_question(form_id, question_text, question_type, min_value=None, max_value=None):
     """Add a question to a form."""
@@ -300,3 +420,47 @@ def reorder_questions(form_id, question_orders):
         cursor.execute('UPDATE questions SET question_order = ? WHERE id = ?', (order, question_id))
     conn.commit()
     conn.close()
+
+# --- Form Response Management ---
+
+def submit_form_response(form_id, answers_dict, submitted_by):
+    """Submit a form response with answers. answers_dict is {question_id: answer}."""
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    
+    # Create a new response record
+    cursor.execute('INSERT INTO form_responses (form_id, submitted_by) VALUES (?, ?)',
+                   (form_id, submitted_by))
+    response_id = cursor.lastrowid
+    
+    # Insert all answers
+    for question_id, answer in answers_dict.items():
+        cursor.execute('INSERT INTO response_answers (response_id, question_id, answer) VALUES (?, ?, ?)',
+                       (response_id, question_id, str(answer)))
+    
+    conn.commit()
+    conn.close()
+    return response_id
+
+def get_form_responses(form_id):
+    """Get all responses for a form."""
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, submitted_by, submitted_date FROM form_responses WHERE form_id = ? ORDER BY submitted_date DESC',
+                   (form_id,))
+    responses = cursor.fetchall()
+    conn.close()
+    return responses
+
+def get_response_answers(response_id):
+    """Get all answers for a specific response."""
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    cursor.execute('''SELECT ra.question_id, q.question_text, q.question_type, ra.answer 
+                      FROM response_answers ra
+                      JOIN questions q ON ra.question_id = q.id
+                      WHERE ra.response_id = ?
+                      ORDER BY q.question_order''', (response_id,))
+    answers = cursor.fetchall()
+    conn.close()
+    return answers

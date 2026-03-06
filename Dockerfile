@@ -17,10 +17,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 6. A maradék kód (a projekted) átmásolása a munkakönyvtárba
-COPY . .
+COPY src/ .
 
 # 7. (Opcionális) Ha a programod egy szerver, nyisd meg a portot
 EXPOSE 8501
 
 # 8. A parancs, ami elindítja a programodat
-CMD ["python", "main.py"]
+CMD ["streamlit", "run", "main.py"]

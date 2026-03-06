@@ -1,5 +1,8 @@
 import streamlit as st
-from database_manager import get_all_employees, update_employee_role, ROLES, check_permission, delete_employee, add_group_to_employee, remove_group_from_employee, get_all_groups, add_group, delete_group
+from database_manager import(
+    get_all_employees, update_employee_role, ROLES, check_permission, delete_employee, 
+    add_group_to_employee, remove_group_from_employee, get_all_groups, add_group, delete_group
+)
 
 st.set_page_config(layout="wide")
 
@@ -9,7 +12,6 @@ try:
 except FileNotFoundError:
     st.error("CSS file not found. Please make sure 'style.css' is in the same folder.")
 
-st.title("Permissions", text_alignment="center")
 
 # Dialog for managing all groups
 @st.dialog("Manage Groups")
@@ -51,12 +53,15 @@ def group_manager():
         st.info("No groups created yet")
 
 
-if check_permission("update"):
-    col1, col2 = st.columns([4, 1])
-    with col2:
-        if st.button("Manage Groups", type="secondary", use_container_width=True):
-            group_manager()
+#if check_permission("update"):
+col1, col2 = st.columns([4, 1])
+with col1:
+    st.header("Employees")
+with col2:
+    if st.button("Manage Groups", type="secondary", use_container_width=True):
+        group_manager()
 
+st.divider()
 
 # Dialog for editing employee groups
 @st.dialog("Edit Employee Groups")
@@ -103,7 +108,6 @@ def edit_groups_dialog(employee_id, employee_name, current_groups):
 
 
 employees = get_all_employees()
-st.subheader("Employees")
 
 col1, col2, col3, col4, col5, col6 = st.columns(6)
 with col1:
@@ -121,7 +125,7 @@ with col6:
 
 if employees:
     for employee in employees:
-        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        col1, col2, col3, col4, col5, col6 = st.columns(6, vertical_alignment="center")
         with col1:
             st.write(f"{employee['id']}")
         with col2:
@@ -129,20 +133,26 @@ if employees:
         with col3:
             st.write(employee['email'])
         with col4:
-            if employee['groups']:
-                for group in employee['groups']:
-                    st.write(f"  • {group}")
-            else:
-                st.write("No groups assigned")
+            with st.container(border=True):
+                if employee['groups']:
+                    for group in employee['groups']:
+                        st.write(f"  • {group}")
+                else:
+                    st.write("No groups assigned")
         with col5:
             disabled = True
-            if check_permission("update"):
-                disabled = False
+            #if check_permission("update"):
+            disabled = False
 
+            role_options = list(ROLES.keys())
+            current_role_index = 0
+            if employee['role'] in role_options:
+                current_role_index = role_options.index(employee['role'])
+            
             new_role = st.selectbox(
                 "Role",
-                options=list(ROLES.keys()),
-                index=list(ROLES.keys()).index(employee['role']),
+                options=role_options,
+                index=current_role_index,
                 key=f"role_{employee['id']}",
                 label_visibility="collapsed",
                 disabled=disabled
@@ -152,12 +162,13 @@ if employees:
                 st.rerun()
         with col6:
             col_edit, col_delete = st.columns(2)
-            if check_permission("update"):
-                with col_edit:
-                    if st.button(label="✏️", key=f"edit_{employee['id']}"):
-                        edit_groups_dialog(employee['id'], f"{employee['first_name']} {employee['last_name']}", employee['groups'])
-            if check_permission("delete"):
-                with col_delete:
-                    st.button(label="❌", key=f"delete_{employee['id']}", on_click=delete_employee, args=(employee['id'],))
+            #if check_permission("update"):
+            with col_edit:
+                if st.button(label="Edit groups", key=f"edit_{employee['id']}"):
+                    edit_groups_dialog(employee['id'], f"{employee['first_name']} {employee['last_name']}", employee['groups'])
+            #if check_permission("delete"):
+            with col_delete:
+                st.button(label="❌", key=f"delete_{employee['id']}", on_click=delete_employee, args=(employee['id'],))
+
 else:
     st.info("No employees found.")

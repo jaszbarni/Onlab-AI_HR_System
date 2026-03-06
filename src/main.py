@@ -1,6 +1,9 @@
 import streamlit as st
-from database_manager import User, add_employee
+from database_manager import add_employee
+from classes.user_class import User
 
+
+#TODO Jogosultságok kezelése, login
 
 st.set_page_config(layout="wide")
 
@@ -13,26 +16,38 @@ except FileNotFoundError:
 
 # Felhasználó inicializálása (Hardcoded)
 # Ez a rész később lecserélhető az st.login() hívásra
-test_user = User("Teszt", "Elek", "Leader", "leader@example.com", "")
+test_F = User("Teszt", "Elek", "leader@example.com", "")
+test_BO = User("Teszt", "Jóska", "testjoska@example.com", "")
+test_M = User("Teszt", "Péter", "testpeter@example.com", "")
+test_V = User("Teszt", "Vilmos", "testvilmos@example.com", "")
 
-st.session_state.user = test_user
+st.session_state.user = test_V
 
-#add_employee(test_user)
+if st.button("Add test employees"):
+    add_employee(test_BO)
+    add_employee(test_F)
+    add_employee(test_M)
+    add_employee(test_V)
+    st.rerun()
 
-if "user" not in st.session_state:
-    st.session_state.user = test_user
 
+
+# Configure sidebar navigation (excludes 4_EditForm from sidebar)
+pages = [
+    st.Page("pages/1_Employees.py", title="Employees"),
+    st.Page("pages/2_Campaigns.py", title="Campaigns"),
+    st.Page("pages/3_Forms.py", title="Forms"),
+]
+
+page = st.navigation(pages)
 
 # Sidebar-on megjelenítjük a bejelentkezett felhasználót
 with st.sidebar:
-    st.header("Felhasználó adatok")
+    st.header("User Data")
     st.write(f"Name: {st.session_state.user.first_name} {st.session_state.user.last_name}")
     st.write(f"Role: {st.session_state.user.role}")
 
 
 st.title("HR System", text_alignment="center")
 
-if st.button(label="Permission manager", width="content", icon_position="right", type="secondary"):
-    st.switch_page("pages/1_Permissions.py")
-if st.button(label="Form templates", width="content", icon_position="right", type="secondary"):
-    st.switch_page("pages/3_Forms.py")
+page.run()
