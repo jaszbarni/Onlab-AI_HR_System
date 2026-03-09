@@ -55,3 +55,24 @@ def back_button(view_key, form_id_key, target_view="list"):
         st.rerun()
         return True
     return False
+
+@st.dialog("Confirm Deletion")
+def delete_confirmation_dialog(item_name, delete_callback, *args):
+    """
+    A true modal popup for deletions.
+    Args:
+        item_name: Name of the item to display
+        delete_callback: The function to run if confirmed (e.g., delete_campaign)
+        args: Any arguments needed for the callback (e.g., item_id)
+    """
+    st.write(f"Are you sure you want to delete **{item_name}**?")
+    st.warning("This action cannot be undone.")
+    
+    col1, col2 = st.columns(2)
+    if col1.button("Delete", type="primary", use_container_width=True):
+        delete_callback(*args)
+        st.success(f"Deleted {item_name}")
+        st.rerun()
+        
+    if col2.button("Cancel", use_container_width=True):
+        st.rerun()

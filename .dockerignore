@@ -1,6 +1,9 @@
-.venv/
-__pycache__/
+# Ignore virtual environment
+.venv
+
+# Ignore Python cache files
+**/__pycache__
 *.pyc
-.git/
-.env
-kerdesek.txt
+
+# Ignore database files from the build context
+src/data.db

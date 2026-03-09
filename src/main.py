@@ -3,7 +3,7 @@ from database_manager import add_employee
 from classes.user_class import User
 
 
-#TODO Jogosultságok kezelése, login
+#TODO Jogosultságok kezelése, login, add test user button kiszedés, session state mutato kiszedese
 
 st.set_page_config(layout="wide")
 
@@ -49,5 +49,7 @@ with st.sidebar:
 
 
 st.title("HR System", text_alignment="center")
+
+st.json({k: str(v) for k, v in st.session_state.items()})
 
 page.run()

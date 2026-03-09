@@ -3,8 +3,12 @@ from database_manager import(
     get_all_employees, update_employee_role, ROLES, check_permission, delete_employee, 
     add_group_to_employee, remove_group_from_employee, get_all_groups, add_group, delete_group
 )
+from utils.common import delete_confirmation_dialog
 
 st.set_page_config(layout="wide")
+
+if "view" not in st.session_state:
+    st.session_state.view = "employees"
 
 try:
     with open("Resources/style.css") as f:
@@ -168,7 +172,8 @@ if employees:
                     edit_groups_dialog(employee['id'], f"{employee['first_name']} {employee['last_name']}", employee['groups'])
             #if check_permission("delete"):
             with col_delete:
-                st.button(label="❌", key=f"delete_{employee['id']}", on_click=delete_employee, args=(employee['id'],))
+                if st.button(label="❌", key=f"delete_{employee['id']}"):
+                    delete_confirmation_dialog("employee", delete_employee, employee['id'])
 
 else:
     st.info("No employees found.")
