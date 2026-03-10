@@ -1,88 +1,199 @@
 import streamlit as st
-from database_manager import get_all_employees, get_all_groups, assign_group_to_form
+import random
+import uuid
+from database_manager import get_all_employees, get_all_groups, get_all_roles
 
 def show_assign_group(form_id):
     """Show the view to assign a group to a form."""
-    st.title("Assign Group to Form")
 
     if st.button("← Back"):
         st.session_state.campaigns_view = "campaign_forms"
         
         # Clear matrix state
-        keys_to_delete = [k for k in st.session_state if k.startswith('emp_select_') or k == 'num_select_boxes']
+        keys_to_delete = [
+            k for k in st.session_state 
+            if k.startswith('emp_select_') or k.startswith('cell_') or 
+            k == 'num_select_boxes' or k == 'group_select' or k == 'auto_eval'
+        ]
         for k in keys_to_delete:
             if k in st.session_state:
                 del st.session_state[k]
         st.rerun()
 
+    st.title("Assign Group to Form")
+    debug = ""
     
-
     st.divider()
 
     all_groups = get_all_groups()
-    employees = get_all_employees()
+    all_roles = get_all_roles()
+    all_employees = get_all_employees()
+
+    col1, col2, col3 = st.columns(3, border=True)
+    with col1:
+        st.write("Select a group")
+        st.selectbox(
+            label="Select group",
+            options=["No group"] + all_groups,
+            key="group_select",
+            placeholder="Select a group",
+            label_visibility="collapsed"
+        )
+    with col2:
+        st.write("Everyone has to have self-evaluation")
+        st.selectbox(
+            label="self eval",
+            options=["No", "Yes"],
+            key="self_eval",
+            label_visibility="collapsed"
+        )
+    with col3:
+        st.write("Random evaluation | How many evaulations?")
+        sub_col1, sub_col2 = st.columns([0.4, 0.6])
+        with sub_col1:
+            st.selectbox(
+                label="auto eval",
+                options=["No", "Yes"],
+                key="auto_eval",
+                label_visibility="collapsed"
+                )
+        with sub_col2:
+            st.number_input(
+                label="How many",
+                min_value=0,
+                max_value=len(all_employees),
+                key="num_select_boxes",
+                disabled=st.session_state.get("auto_eval") == "No",
+                label_visibility="collapsed",
+                step=1,
+                )
+
+    selected_group = st.session_state.get("group_select")
+    employees = []
+
+    if selected_group and selected_group != "No group":
+        employees += [emp for emp in all_employees if selected_group in emp.get('groups', [])]
+
+    if employees == []:
+        employees = all_employees
+    
     employee_names = [f"{employee['first_name']} {employee['last_name']}" for employee in employees]
 
+    # --- Initialize Manual Selection State ---
+    if 'employee_selections' not in st.session_state:
+        st.session_state.employee_selections = []
+        
+    if 'employee_slot_keys' not in st.session_state:
+        st.session_state.employee_slot_keys = [str(uuid.uuid4()) for _ in st.session_state.employee_selections]
+
+    # --- Handle auto random selection ---
+    is_auto_eval = st.session_state.get("auto_eval") == "Yes"
+
+    if 'was_auto_eval' not in st.session_state:
+        st.session_state.was_auto_eval = not is_auto_eval
+
+    switched_to_auto = is_auto_eval and not st.session_state.was_auto_eval
+    switched_from_auto = not is_auto_eval and st.session_state.was_auto_eval
+    
+    if switched_from_auto:
+        st.session_state.employee_selections = [""] # Reset when switching off auto
+        st.session_state.employee_slot_keys = [str(uuid.uuid4())] # Reset keys
+        for key in list(st.session_state.keys()):
+            if key.startswith("cell_"):
+                # FIX: Force to False instead of deleting to guarantee UI updates
+                st.session_state[key] = False 
+
+    num_boxes_changed = False
+    if is_auto_eval:
+        if 'last_num_boxes' not in st.session_state:
+            st.session_state.last_num_boxes = -1
+        if st.session_state.last_num_boxes != st.session_state.get("num_select_boxes", 0):
+            num_boxes_changed = True
+            st.session_state.last_num_boxes = st.session_state.get("num_select_boxes", 0)
+
+    if is_auto_eval and (switched_to_auto or num_boxes_changed):
+        num_to_select = int(st.session_state.get("num_select_boxes", 0))
+        
+        # Clear all previous evaluation selections before re-calculating
+        for key in list(st.session_state.keys()):
+            if key.startswith("cell_"):
+                # FIX: Force to False instead of deleting
+                st.session_state[key] = False
+
+        if switched_to_auto:
+            # Automatically select all employees only when switching to auto mode
+            st.session_state.employee_selections = employee_names.copy()
+            st.session_state.employee_slot_keys = [str(uuid.uuid4()) for _ in employee_names]
+        
+        selected_employees = list(dict.fromkeys([s for s in st.session_state.get("employee_selections", []) if s]))
+        
+        if num_to_select > 0 and selected_employees:
+            for filler_emp in selected_employees:
+                possible_targets = [emp for emp in selected_employees if emp != filler_emp]
+                num_evals = min(num_to_select, len(possible_targets))
+                if num_evals > 0:
+                    targets_to_eval = random.sample(possible_targets, num_evals)
+                    for target_emp in targets_to_eval:
+                        st.session_state[f"cell_{filler_emp}_{target_emp}"] = True
+
+    st.session_state.was_auto_eval = is_auto_eval
 
 
-    if 'num_select_boxes' not in st.session_state:
-        st.session_state.num_select_boxes = 1
-
-    col1, col2 = st.columns([0.3, 0.7])
+    col1, col2 = st.columns([0.3, 0.7], border=True)
 
     with col1:
         st.subheader("Select Employees")
 
-        # Get all unique selections from the session state
-        all_selections = set()
-        for i in range(st.session_state.num_select_boxes):
-            employee = st.session_state.get(f"emp_select_{i}")
-            if employee:
-                all_selections.add(employee)
+        def add_employee_slot():
+            st.session_state.employee_selections.append("")
+            st.session_state.employee_slot_keys.append(str(uuid.uuid4()))
 
-        for i in range(st.session_state.num_select_boxes):
-            sub_col1, sub_col2 = st.columns([0.85, 0.15])
+        def remove_employee_slot(index):
+            st.session_state.employee_selections.pop(index)
+            st.session_state.employee_slot_keys.pop(index)
+
+        def sync_selection(index, key):
+            st.session_state.employee_selections[index] = st.session_state[key]
+
+        all_current_selections = {s for s in st.session_state.employee_selections if s}
+
+        for i, selection in enumerate(st.session_state.employee_selections):
+            sub_col1, sub_col2 = st.columns([0.80, 0.20])
+            
+            slot_id = st.session_state.employee_slot_keys[i]
+            
             with sub_col1:
-                current_selection = st.session_state.get(f"emp_select_{i}")
-                
-                other_selections = all_selections - {current_selection}
+                other_selections = all_current_selections - {selection}
                 available_options = [name for name in employee_names if name not in other_selections]
                 
+                try:
+                    default_index = ([""] + available_options).index(selection)
+                except ValueError:
+                    default_index = 0
+                
+                widget_key = f"emp_select_{slot_id}"
                 st.selectbox(
                     label=f"Employee {i+1}",
                     options=[""] + available_options,
-                    key=f"emp_select_{i}",
-                    label_visibility="collapsed"
+                    key=widget_key,
+                    index=default_index,
+                    label_visibility="collapsed",
+                    on_change=sync_selection,
+                    args=(i, widget_key),
                 )
+
             with sub_col2:
-                if st.button("X", key=f"remove_emp_{i}", type="primary"):
-                    for j in range(i, st.session_state.num_select_boxes - 1):
-                        st.session_state[f"emp_select_{j}"] = st.session_state.get(f"emp_select_{j+1}", "")
-                    
-                    last_key = f"emp_select_{st.session_state.num_select_boxes - 1}"
-                    if last_key in st.session_state:
-                        del st.session_state[last_key]
+                st.button(label="❌", key=f"remove_emp_{slot_id}", on_click=remove_employee_slot, args=(i,))
 
-                    st.session_state.num_select_boxes -= 1
-                    st.rerun()
-
-        if st.button("+ Add employee"):
-            st.session_state.num_select_boxes += 1
-            st.rerun()
+        st.button("Add employee", on_click=add_employee_slot)
 
     with col2:
         st.subheader("Evaluation Matrix")
 
-        selected_employees = []
-        for i in range(st.session_state.num_select_boxes):
-            employee = st.session_state.get(f"emp_select_{i}")
-            if employee:
-                selected_employees.append(employee)
-        
-        selected_employees = list(dict.fromkeys(selected_employees))
+        selected_employees = [s for s in st.session_state.employee_selections if s]
+        selected_employees = list(dict.fromkeys(selected_employees)) 
 
         if selected_employees:
-            
             matrix_employees = list(selected_employees)
 
             # Header row
@@ -98,8 +209,36 @@ def show_assign_group(form_id):
                 
                 for i, target_emp in enumerate(matrix_employees):
                     with row_cols[i+1]:
-                        st.checkbox("", key=f"cell_{filler_emp}_{target_emp}")
-            
+                        in_row_col1, in_row_col2 = st.columns([0.01, 0.9])
+                        
+                        if filler_emp == target_emp:
+                            with in_row_col1:
+                                if st.session_state.get("self_eval") == "Yes":
+                                    st.session_state[f"cell_{filler_emp}_{target_emp}"] = True
+                                    st.checkbox("", key=f"cell_{filler_emp}_{target_emp}", disabled=True)
+                                else:
+                                    st.checkbox("", key=f"cell_{filler_emp}_{target_emp}")
+                            if st.session_state.get(f"cell_{filler_emp}_{target_emp}") == True:
+                                with in_row_col2:
+                                    st.selectbox(
+                                        label="Select role",
+                                        options=["Önértékelés"],
+                                        key=f"cell_role_{filler_emp}_{target_emp}",
+                                        label_visibility="collapsed",
+                                        disabled=True
+                                    )
+                        else:
+                            with in_row_col1:
+                                st.checkbox("", key=f"cell_{filler_emp}_{target_emp}")
+                            if st.session_state.get(f"cell_{filler_emp}_{target_emp}") == True:
+                                with in_row_col2:
+                                    st.selectbox(
+                                        label="Select role",
+                                        options=[""] + all_roles,
+                                        key=f"cell_role_{filler_emp}_{target_emp}",
+                                        label_visibility="collapsed",
+                                    )
+                
             st.divider()
 
             if st.button("Assign Group", type="primary"):
@@ -113,7 +252,7 @@ def show_assign_group(form_id):
                             })
                 
                 st.session_state.send_form = send_form
-                st.success(f"{len(st.session_state.send_form)} employees assigned")
+                st.success(f"{len(st.session_state.send_form)} assignments prepared.")
                 st.write(st.session_state.send_form)
         else:
             st.info("No employees selected.")

@@ -15,6 +15,9 @@ ROLES = {
     "Fizikai": []
 }
 
+def get_all_roles():
+    return list(ROLES.keys())
+
 
 
 def check_permission(permission):
