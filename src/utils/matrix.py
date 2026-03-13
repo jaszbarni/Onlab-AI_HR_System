@@ -1,7 +1,7 @@
 import streamlit as st
 import random
 import uuid
-from database_manager import get_all_employees, get_all_groups, get_all_roles
+from database_manager import get_all_employees, get_all_groups, add_form_assignments
 
 def show_assign_group(form_id):
     """Show the view to assign a group to a form."""
@@ -21,15 +21,13 @@ def show_assign_group(form_id):
         st.rerun()
 
     st.title("Assign Group to Form")
-    debug = ""
     
     st.divider()
 
     all_groups = get_all_groups()
-    all_roles = get_all_roles()
     all_employees = get_all_employees()
 
-    col1, col2, col3 = st.columns(3, border=True)
+    col1, col2, col3 = st.columns([0.3, 0.3, 0.4], border=True)
     with col1:
         st.write("Select a group")
         st.selectbox(
@@ -48,7 +46,7 @@ def show_assign_group(form_id):
             label_visibility="collapsed"
         )
     with col3:
-        st.write("Random evaluation | How many evaulations?")
+        st.write("Random evaluation | How many evaulations per person?")
         sub_col1, sub_col2 = st.columns([0.4, 0.6])
         with sub_col1:
             st.selectbox(
@@ -61,7 +59,7 @@ def show_assign_group(form_id):
             st.number_input(
                 label="How many",
                 min_value=0,
-                max_value=len(all_employees),
+                max_value=len(all_employees)-1, #-1 because of the self eval
                 key="num_select_boxes",
                 disabled=st.session_state.get("auto_eval") == "No",
                 label_visibility="collapsed",
@@ -100,7 +98,6 @@ def show_assign_group(form_id):
         st.session_state.employee_slot_keys = [str(uuid.uuid4())] # Reset keys
         for key in list(st.session_state.keys()):
             if key.startswith("cell_"):
-                # FIX: Force to False instead of deleting to guarantee UI updates
                 st.session_state[key] = False 
 
     num_boxes_changed = False
@@ -137,7 +134,6 @@ def show_assign_group(form_id):
                         st.session_state[f"cell_{filler_emp}_{target_emp}"] = True
 
     st.session_state.was_auto_eval = is_auto_eval
-
 
     col1, col2 = st.columns([0.3, 0.7], border=True)
 
@@ -188,7 +184,15 @@ def show_assign_group(form_id):
         st.button("Add employee", on_click=add_employee_slot)
 
     with col2:
-        st.subheader("Evaluation Matrix")
+
+        st.subheader("Evaluation Matrix", text_alignment="center", divider="gray")
+
+        header_col1, header_col2 = st.columns([0.25, 0.75])
+        with header_col1:
+            st.caption("**Form Filler ↓**")
+        with header_col2:
+            st.caption("**Target Employee →**")
+            
 
         selected_employees = [s for s in st.session_state.employee_selections if s]
         selected_employees = list(dict.fromkeys(selected_employees)) 
@@ -202,6 +206,20 @@ def show_assign_group(form_id):
             for i, target_emp in enumerate(matrix_employees):
                 header_cols[i+1].write(target_emp)
 
+            def Get_employee_role(target_emp):
+                target_emp_data = next((emp for emp in all_employees if f"{emp['first_name']} {emp['last_name']}" == target_emp), None)
+                role = "Peer"
+                if target_emp_data:
+                    role = target_emp_data.get("role") or "Peer"
+                return role
+
+            
+            role_colors = {}
+            color_palette = [
+                "red", "orange", "yellow", "blue", "green", "violet"
+            ]
+            next_color_index = 0
+
             # Matrix rows
             for filler_emp in matrix_employees:
                 row_cols = st.columns(len(matrix_employees) + 1)
@@ -209,7 +227,7 @@ def show_assign_group(form_id):
                 
                 for i, target_emp in enumerate(matrix_employees):
                     with row_cols[i+1]:
-                        in_row_col1, in_row_col2 = st.columns([0.01, 0.9])
+                        in_row_col1, in_row_col2 = st.columns([0.01, 0.9], vertical_alignment="center")
                         
                         if filler_emp == target_emp:
                             with in_row_col1:
@@ -220,25 +238,17 @@ def show_assign_group(form_id):
                                     st.checkbox("", key=f"cell_{filler_emp}_{target_emp}")
                             if st.session_state.get(f"cell_{filler_emp}_{target_emp}") == True:
                                 with in_row_col2:
-                                    st.selectbox(
-                                        label="Select role",
-                                        options=["Önértékelés"],
-                                        key=f"cell_role_{filler_emp}_{target_emp}",
-                                        label_visibility="collapsed",
-                                        disabled=True
-                                    )
+                                    st.badge("Self-evaluation", color="grey")
                         else:
                             with in_row_col1:
                                 st.checkbox("", key=f"cell_{filler_emp}_{target_emp}")
                             if st.session_state.get(f"cell_{filler_emp}_{target_emp}") == True:
                                 with in_row_col2:
-                                    st.selectbox(
-                                        label="Select role",
-                                        options=[""] + all_roles,
-                                        key=f"cell_role_{filler_emp}_{target_emp}",
-                                        label_visibility="collapsed",
-                                    )
-                
+                                    role = Get_employee_role(target_emp)
+                                    if role not in role_colors:
+                                        role_colors[role] = color_palette[next_color_index]
+                                        next_color_index = (next_color_index + 1) % len(color_palette)
+                                    st.badge(role, color=role_colors[role])
             st.divider()
 
             if st.button("Assign Group", type="primary"):
@@ -248,11 +258,13 @@ def show_assign_group(form_id):
                         if st.session_state.get(f"cell_{filler_emp}_{target_emp}"):
                             send_form.append({
                                 "form_filler": filler_emp,
-                                "target": target_emp
+                                "target": target_emp,
+                                "form_type": Get_employee_role(target_emp)
                             })
                 
+                add_form_assignments(form_id, send_form)
                 st.session_state.send_form = send_form
-                st.success(f"{len(st.session_state.send_form)} assignments prepared.")
+                st.success(f"{len(st.session_state.send_form)} assignments prepared and saved to database.")
                 st.write(st.session_state.send_form)
         else:
             st.info("No employees selected.")

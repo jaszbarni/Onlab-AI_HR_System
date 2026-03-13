@@ -3,11 +3,10 @@ import streamlit as st
 from database_manager import (
     create_form, update_form, create_campaign, get_all_campaigns, get_campaign_by_id, get_forms_by_campaign,
     update_campaign, delete_campaign,
-    add_question, update_question, delete_question, get_all_forms, delete_form, get_assigned_group
+    add_question, update_question, delete_question, get_all_forms, delete_form, get_assigned_group, get_all_roles
 )
 from classes.form_template_class import FormTemplate
 from utils.common import get_user_name, back_button, delete_confirmation_dialog
-from utils.matrix import show_assign_group
 
 
 def render_question_editor(question_id, question_text, question_type, min_val, max_val, form_id):
@@ -23,9 +22,9 @@ def render_question_editor(question_id, question_text, question_type, min_val, m
             new_text = st.text_input("Question Text", value=question_text, key=f"text_{question_id}")
             new_type = st.selectbox(
                 "Question Type",
-                ["Text Box", "0-5 Rating", "1-10 Rating", "Multiple Choice"],
-                index=["Text Box", "0-5 Rating", "1-10 Rating", "Multiple Choice"].index(question_type) if question_type in ["Text Box", "0-5 Rating", "1-10 Rating", "Multiple Choice"] else 0,
-                key=f"type_{question_id}"
+                ["Text Box", "0-5 Rating", "1-10 Rating"],
+                index=["Text Box", "0-5 Rating", "1-10 Rating"].index(question_type) if question_type in ["Text Box", "0-5 Rating", "1-10 Rating"] else 0,
+                key=f"type_{question_id}",
             )
         
         with col3:
@@ -120,12 +119,25 @@ def show_create_campaign():
     if st.button("Create Campaign", type="primary"):
         if campaign_name.strip():
             campaign_id = create_campaign(campaign_name, campaign_description, user_name)
-            st.success("Campaign created!")
+
+            # Create the default templates for this new campaign
+            all_roles = get_all_roles() + ["Peer"]  # Add Peer as a default role
+            for role in all_roles:
+                create_form(
+                    name=role,
+                    description=f"Default form template for the {role} role.",
+                    created_by="system",
+                    campaign_id=campaign_id
+                )
+
+            st.success("Campaign created with default form templates!")
             st.session_state.campaigns_view = "campaign_forms"
             st.session_state.current_campaign_id = campaign_id
             st.rerun()
         else:
             st.error("Campaign name cannot be empty")
+
+
 
 
 def show_edit_campaign():
@@ -137,7 +149,7 @@ def show_edit_campaign():
         st.error("Campaign not found")
         st.stop()
     
-    campaign_id, name, description, created_by, created_date = campaign
+    campaign_id, name, description = campaign
     if st.button("← Back to Campaigns"):
         st.session_state.campaigns_view = "list"
         st.rerun()
@@ -165,22 +177,23 @@ def show_edit_campaign():
             st.session_state.campaigns_view = "campaign_forms"
             st.rerun()
 
-    
 
 
 def show_campaign_forms():
     """Display forms within a campaign."""
     campaign_id = st.session_state.current_campaign_id
     campaign = get_campaign_by_id(campaign_id)
+
+   
     
     if not campaign:
         st.error("Campaign not found")
         st.stop()
     
-    campaign_id, campaign_name, campaign_description, created_by, created_date = campaign
+    campaign_id, campaign_name, campaign_description, = campaign
     
     # Header with back button
-    if st.button("← Back to Campaigns"):
+    if st.button("← Back to campaigns"):
         st.session_state.campaigns_view = "list"
         st.session_state.current_campaign_id = None
         st.rerun()
@@ -193,17 +206,20 @@ def show_campaign_forms():
     st.divider()
     
     # Campaign actions
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button(label="Create Form", use_container_width=True, type="primary"):
-            st.session_state.campaigns_view = "create_form"
-            st.session_state.current_form_id = None
-            st.rerun()
-    with col2:
         if st.button(label="Edit Campaign", use_container_width=True):
             st.session_state.campaigns_view = "edit_campaign"
             st.rerun()
-    
+    with col2:
+        if st.button(label="Show statistics", use_container_width=True):
+            st.session_state.campaigns_view = "statistics"
+            st.rerun()
+    with col3:
+        if st.button("Assign employees", key=f"assign_{campaign_id}", use_container_width=True):
+            st.session_state.campaigns_view = "assign_group"
+            st.rerun()
+        
     st.divider()
     
     # Display forms in this campaign
@@ -212,22 +228,18 @@ def show_campaign_forms():
     if not forms:
         st.info("No forms in this campaign yet. Click 'Create Form' to add one.")
     else:
-        st.subheader(f"Forms ({len(forms)})")
+        st.subheader(f"Form templates ({len(forms)})")
         
         for form in forms:
             form_id, form_name, form_description = form[:3]
-            assigned_group = get_assigned_group(form_id)
             
             with st.container(border=True):
-                col1, col2, col3, col4, col5 = st.columns([0.35, 0.25, 0.15, 0.15, 0.1])
+                col1, col2, col3, col4 = st.columns([0.35, 0.25, 0.15, 0.15])
                 
                 with col1:
                     st.markdown(f"#### {form_name}")
                     if form_description:
                         st.caption(form_description)
-                
-                with col2:
-                    st.write("Email not yet sent")
                 
                 with col3:
                     if st.button("Edit", key=f"edit_{form_id}", use_container_width=True):
@@ -239,45 +251,6 @@ def show_campaign_forms():
                     if st.button("Delete", key=f"delete_{form_id}", use_container_width=True):
                         delete_confirmation_dialog("form", delete_form, form_id)
                 
-
-                with col5:
-                    if st.button("Assign", key=f"assign_group_{form_id}", use_container_width=True):
-                        st.session_state.campaigns_view = "assign_group"
-                        st.session_state.current_form_id = form_id
-                        st.rerun()
-
-
-def show_create_form(campaign_id):
-    """Create a new form within a campaign."""
-    
-    # Back button
-    if st.button("← Back to forms"):
-        st.session_state.campaigns_view = "campaign_forms"
-        st.session_state.current_form_id = None
-        st.rerun()
-    
-    st.title("Create New Form")
-
-    st.divider()
-    
-    user_name = get_user_name()
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        form_name = st.text_input("Form Name", placeholder="e.g., Employee Satisfaction Survey")
-    with col2:
-        form_description = st.text_area("Description", placeholder="Brief description of the form", height=100)
-    
-    if st.button("Create Form", type="primary"):
-        if form_name.strip():
-            new_form_id = create_form(form_name, form_description, user_name, campaign_id)
-            st.session_state.current_form_id = new_form_id
-            st.session_state.campaigns_view = "edit_form"
-            st.success("Form created!")
-            st.rerun()
-        else:
-            st.error("Form name cannot be empty")
-
 
 def show_edit_form(campaign_id):
     """Edit a form within a campaign."""
@@ -324,9 +297,7 @@ def show_edit_form(campaign_id):
                 with col2:
                     form_description = st.text_area("Description", value=form.get_description() or "", height=100)
                 
-                if st.button("Save Form Details", type="primary"):
-                    update_form(form_id, form_name, form_description)
-                    st.success("Form details updated!")
+
             else:
                 st.error("Form not found")
                 st.stop()
@@ -342,21 +313,22 @@ def show_edit_form(campaign_id):
         st.subheader("Form Questions")
 
         # Add new question section
-        st.markdown("Add New Question")
+        st.markdown("##### Add New Question")
         col1, col2, col3 = st.columns([0.5, 0.25, 0.25])
         
         with col1:
-            new_question_text = st.text_input("Question Text", placeholder="e.g., How satisfied are you?", key="new_question_text")
+            new_question_text = st.text_input("Question Text", placeholder="e.g., How satisfied are you?", key="new_question_text", label_visibility="collapsed")
         
         with col2:
             new_question_type = st.selectbox(
                 "Question Type",
-                ["Text Box", "0-5 Rating", "1-10 Rating", "Multiple Choice"],
-                key="new_question_type"
+                ["Text Box", "0-5 Rating", "1-10 Rating"],
+                key="new_question_type",
+                label_visibility="collapsed"
             )
         
         with col3:
-            if st.button("Add Question", use_container_width=True, type="secondary"):
+            if st.button("Add Question", use_container_width=True, type="primary"):
                 if new_question_text.strip():
                     # Determine min/max values based on type
                     if new_question_type == "0-5 Rating":
@@ -385,6 +357,10 @@ def show_edit_form(campaign_id):
                 render_question_editor(question_id, question_text, question_type, min_val, max_val, form_id)
         else:
             st.info("No questions added yet.")
+
+        if st.button("Save Form Details", type="primary"):  
+            update_form(form_id, form_name, form_description)
+            st.success("Form details updated!")
 
 
 def show_edit_view(view_key, form_id_key):
@@ -457,7 +433,7 @@ def show_edit_view(view_key, form_id_key):
         with col2:
             new_question_type = st.selectbox(
                 "Question Type",
-                ["Text Box", "0-5 Rating", "1-10 Rating", "Multiple Choice"],
+                ["Text Box", "0-5 Rating", "1-10 Rating"],
                 key="new_question_type"
             )
         
@@ -492,8 +468,22 @@ def show_edit_view(view_key, form_id_key):
         else:
             st.info("No questions added yet.")
 
+def show_statistics():
+    """Display statistics for a campaign."""
+
+    st.header("Statistics")
+    if st.button("← Back to forms"):
+        st.session_state.campaigns_view = "campaign_forms"
+        st.rerun()
+
+    st.divider()
+    
+
+
 def show_list_view(view_key, form_id_key):
     """Display list of available forms."""
+    # Preload forms for roles if they don't exist
+
     col1, col2 = st.columns([0.8, 0.2])
     with col1:
             st.subheader("Campaigns", text_alignment="left")

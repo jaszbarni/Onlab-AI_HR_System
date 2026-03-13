@@ -1,7 +1,7 @@
 import streamlit as st
 from database_manager import (
     get_form_by_id, get_questions_by_form, get_response_answers, get_form_responses,
-    submit_form_response, get_assigned_group, assign_group_to_form
+    submit_form_response, get_assigned_group, assign_group_to_campaign
 )
 
 
@@ -13,6 +13,7 @@ class FormTemplate:
         self.form_id = form_id
         self.form_data = None
         self.questions = None
+        self.campaign_id = None
         self.load_form()
     
     def load_form(self):
@@ -130,4 +131,4 @@ class FormTemplate:
     
     def assign_group(self, group_name):
         """Assign a group to this form."""
-        assign_group_to_form(self.form_id, group_name)
+        assign_group_to_campaign(self.campaign_id, group_name)

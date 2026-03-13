@@ -97,6 +97,18 @@ def init_db():
                 answer TEXT NOT NULL,
                 FOREIGN KEY (response_id) REFERENCES form_responses(id) ON DELETE CASCADE,
                 FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE)""")
+    # Create form_assignments table
+    cursor.execute("""CREATE TABLE IF NOT EXISTS form_assignments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        form_id INTEGER NOT NULL,
+        filler_employee_id INTEGER NOT NULL,
+        target_employee_id INTEGER NOT NULL,
+        form_type TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE,
+        FOREIGN KEY (filler_employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+        FOREIGN KEY (target_employee_id) REFERENCES employees(id) ON DELETE CASCADE
+    )""")
     conn.commit()
     conn.close()
 
@@ -118,6 +130,13 @@ def migrate_db():
         if "assigned_group" not in columns:
             # Add assigned_group column if it doesn't exist
             cursor.execute("ALTER TABLE forms ADD COLUMN assigned_group TEXT DEFAULT NULL")
+            conn.commit()
+            
+        # Check if form_type column exists in form_assignments table
+        cursor.execute("PRAGMA table_info(form_assignments)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if "form_type" not in columns:
+            cursor.execute("ALTER TABLE form_assignments ADD COLUMN form_type TEXT")
             conn.commit()
     except Exception as e:
         # If migration fails, silently continue
@@ -284,7 +303,7 @@ def get_campaign_by_id(campaign_id):
     """Get a specific campaign by ID."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('SELECT id, name, description, created_by, created_date FROM campaigns WHERE id = ?', (campaign_id,))
+    cursor.execute('SELECT id, name, description FROM campaigns WHERE id = ?', (campaign_id,))
     campaign = cursor.fetchone()
     conn.close()
     return campaign
@@ -328,6 +347,34 @@ def get_all_forms():
     conn.close()
     return forms
 
+def get_forms_for_user_by_email(email):
+    """Get all forms assigned to a specific user by their email."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # First, get the employee ID from email
+    cursor.execute('SELECT id FROM employees WHERE email = ?', (email,))
+    employee_row = cursor.fetchone()
+    
+    if not employee_row:
+        conn.close()
+        return []
+        
+    employee_id = employee_row[0]
+    
+    # Then, get the forms assigned to this employee
+    cursor.execute("""
+        SELECT DISTINCT f.id, f.name, f.description, f.created_by, f.created_date
+        FROM forms f
+        JOIN form_assignments fa ON f.id = fa.form_id
+        WHERE fa.filler_employee_id = ?
+    """, (employee_id,))
+    
+    forms = cursor.fetchall()
+    conn.close()
+    return forms
+
+
 def get_forms_by_campaign(campaign_id):
     """Get all forms for a specific campaign."""
     conn = sqlite3.connect(DB_PATH)
@@ -363,11 +410,11 @@ def delete_form(form_id):
     conn.commit()
     conn.close()
 
-def assign_group_to_form(form_id, group_name):
+def assign_group_to_campaign(campaign_id, group_name):
     """Assign a group to a form."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('UPDATE forms SET assigned_group = ? WHERE id = ?', (group_name, form_id))
+    cursor.execute('UPDATE forms SET assigned_group = ? WHERE id = ?', (group_name, campaign_id))
     conn.commit()
     conn.close()
 
@@ -474,3 +521,31 @@ def get_response_answers(response_id):
     answers = cursor.fetchall()
     conn.close()
     return answers
+
+
+def add_form_assignments(form_id, assignments):
+    """Add form evaluation assignments to the database."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    # Get all employees to create a name -> id mapping
+    cursor.execute("SELECT id, first_name, last_name FROM employees")
+    all_employees = cursor.fetchall()
+    employee_map = {f"{first} {last}": emp_id for emp_id, first, last in all_employees}
+
+    for assignment in assignments:
+        filler_name = assignment["form_filler"]
+        target_name = assignment["target"]
+        form_type = assignment.get("form_type")
+
+        filler_id = employee_map.get(filler_name)
+        target_id = employee_map.get(target_name)
+
+        if filler_id and target_id:
+            cursor.execute("""
+                INSERT INTO form_assignments (form_id, filler_employee_id, target_employee_id, form_type)
+                VALUES (?, ?, ?, ?)
+            """, (form_id, filler_id, target_id, form_type))
+
+    conn.commit()
+    conn.close()

@@ -1,6 +1,6 @@
 """Views for form filling and submission."""
 import streamlit as st
-from database_manager import get_all_forms
+from database_manager import get_all_forms, get_forms_for_user_by_email
 from classes.form_template_class import FormTemplate
 from utils.common import get_user_name, back_button
 
@@ -53,11 +53,12 @@ def show_list_view(view_key, form_id_key):
     st.header("Forms", text_alignment="left")
     st.divider()
 
-    forms = get_all_forms()
+    user_email = st.session_state.user.email
+    forms = get_forms_for_user_by_email(user_email)
     user_name = get_user_name()
 
     if not forms:
-        st.info("No forms created yet. Go to Campaigns page to create one.")
+        st.info("No forms assigned to you at the moment.")
     else:
         st.subheader(f"Available Forms ({len(forms)})")
         
