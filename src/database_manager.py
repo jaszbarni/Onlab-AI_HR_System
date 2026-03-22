@@ -5,6 +5,7 @@ import os
 import functools
 from contextlib import contextmanager
 import uuid
+from datetime import datetime
 
 # Define the database path using an environment variable, with a fallback for local development
 DB_PATH = os.environ.get("DATABASE_PATH", "data.db")
@@ -475,6 +476,41 @@ def get_forms_by_campaign(campaign_id):
         forms = cursor.fetchall()
         return forms
 
+def get_assignments_for_user_by_email(email):
+    """Get all form assignments for a specific user by their email, including the target employee name."""
+    with db_connection() as cursor:
+        # First, get the employee ID from email
+        cursor.execute('SELECT id FROM employees WHERE email = ?', (email,))
+        employee_row = cursor.fetchone()
+        
+        if not employee_row:
+            return []
+            
+        employee_id = employee_row[0]
+        
+        # Then, get the assignments with the target employee's full name
+        cursor.execute("""
+            SELECT fa.id, f.id, f.name, f.description, 
+                   t.first_name || ' ' || t.last_name AS target_name,
+                   fa.status
+            FROM form_assignments fa
+            JOIN forms f ON fa.form_id = f.id
+            JOIN employees t ON fa.target_employee_id = t.id
+            WHERE fa.filler_employee_id = ?
+        """, (employee_id,))
+        
+        return cursor.fetchall()
+
+def update_assignment_status(assignment_id, status):
+    """Update the status of a form assignment."""
+    with db_connection() as cursor:
+        cursor.execute('UPDATE form_assignments SET status = ? WHERE id = ?', (status, assignment_id))
+
+def delete_all_assignments():
+    """Delete all form assignments from the database."""
+    with db_connection() as cursor:
+        cursor.execute('DELETE FROM form_assignments')
+
 def get_form_by_id(form_id):
     """Get a specific form by ID."""
     with db_connection() as cursor:
@@ -546,8 +582,9 @@ def submit_form_response(form_id, answers_dict, submitted_by):
     """Submit a form response with answers. answers_dict is {question_id: answer}."""
     with db_connection() as cursor:
         # Create a new response record
-        cursor.execute('INSERT INTO form_responses (form_id, submitted_by) VALUES (?, ?)',
-                       (form_id, submitted_by))
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute('INSERT INTO form_responses (form_id, submitted_by, submitted_date) VALUES (?, ?, ?)',
+                       (form_id, submitted_by, now))
         response_id = cursor.lastrowid
         
         # Insert all answers
@@ -599,3 +636,53 @@ def add_form_assignments(assignments):
                     INSERT INTO form_assignments (form_id, filler_employee_id, target_employee_id, form_type)
                     VALUES (?, ?, ?, ?)
                 """, (form_id, filler_id, target_id, form_type))
+
+def get_evaluations_for_employee(employee_id):
+    """Get all submitted form responses and answers targeting a specific employee."""
+    with db_connection() as cursor:
+        cursor.execute("SELECT first_name, last_name FROM employees WHERE id = ?", (employee_id,))
+        emp = cursor.fetchone()
+        if not emp:
+            return []
+
+        cursor.execute("""
+            SELECT fa.form_id, f.name AS form_name, e.first_name || ' ' || e.last_name AS filler_name
+            FROM form_assignments fa
+            JOIN forms f ON fa.form_id = f.id
+            JOIN employees e ON fa.filler_employee_id = e.id
+            WHERE fa.target_employee_id = ? AND fa.status = 'completed'
+        """, (employee_id,))
+        
+        assignments = cursor.fetchall()
+        
+        evaluations = []
+        for form_id, form_name, filler_name in assignments:
+            cursor.execute("""
+                SELECT id, submitted_date FROM form_responses 
+                WHERE form_id = ? AND submitted_by = ?
+                ORDER BY submitted_date DESC LIMIT 1
+            """, (form_id, filler_name))
+            response_row = cursor.fetchone()
+            
+            if response_row:
+                response_id = response_row[0]
+                submitted_date = response_row[1]
+                cursor.execute("""
+                    SELECT q.question_text, q.question_type, ra.answer 
+                    FROM response_answers ra
+                    JOIN questions q ON ra.question_id = q.id
+                    WHERE ra.response_id = ?
+                    ORDER BY q.question_order
+                """, (response_id,))
+                
+                answers = cursor.fetchall()
+                formatted_answers = [{"question": row[0], "type": row[1], "answer": row[2]} for row in answers]
+                
+                evaluations.append({
+                    "form_name": form_name,
+                    "evaluator": filler_name,
+                    "submitted_date": submitted_date,
+                    "answers": formatted_answers
+                })
+                
+        return evaluations

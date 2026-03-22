@@ -1,8 +1,8 @@
 """Views for form filling and submission."""
 import streamlit as st
-from database_manager import get_all_forms, get_forms_for_user_by_email
+from database_manager import get_all_forms, get_assignments_for_user_by_email, update_assignment_status, delete_all_assignments, check_permission
 from classes.form_template_class import FormTemplate
-from utils.common import get_user_name, back_button
+from utils.common import get_user_name, back_button, delete_confirmation_dialog
 
 
 def render_question_input(question_id, question_text, question_type, min_val, max_val):
@@ -50,28 +50,30 @@ def show_list_view(view_key, form_id_key):
         view_key: Session state key for current view
         form_id_key: Session state key for current form ID
     """
+    st.button("delete all assignments", on_click=delete_all_assignments)
+
     st.header("Forms", text_alignment="left")
     st.divider()
 
     user_email = st.session_state.user.email
-    forms = get_forms_for_user_by_email(user_email)
+    assignments = get_assignments_for_user_by_email(user_email)
     user_name = get_user_name()
 
-    if not forms:
+    if not assignments:
         st.info("No forms assigned to you at the moment.")
     else:
-        st.subheader(f"Available Forms ({len(forms)})")
+        st.subheader(f"Available Forms ({len(assignments)})")
         
-        for form in forms:
-            form_id, name, description, created_by, created_date = form
-            form_template = FormTemplate(form_id)
-            user_has_submitted = form_template.has_user_submitted(user_name)
+        for assignment in assignments:
+            assignment_id, form_id, name, description, target_name, status = assignment
+            user_has_submitted = (status == 'completed')
             
             with st.container(border=True):
                 col1, col2 = st.columns([0.85, 0.15])
                 
                 with col1:
                     st.markdown(f"### {name}")
+                    st.markdown(f"**Target Employee:** {target_name}")
                     if description:
                         st.caption(description)
                     if user_has_submitted:
@@ -79,11 +81,13 @@ def show_list_view(view_key, form_id_key):
                 
                 with col2:
                     if user_has_submitted:
-                        st.button("✓ Completed", key=f"fillout_{form_id}", use_container_width=True, disabled=True)
+                        st.button("✓ Completed", key=f"fillout_{assignment_id}", use_container_width=True, disabled=True)
                     else:
-                        if st.button("📝 Fill Out", key=f"fillout_{form_id}", use_container_width=True):
+                        if st.button("📝 Fill Out", key=f"fillout_{assignment_id}", use_container_width=True):
                             st.session_state[view_key] = "fill"
                             st.session_state[form_id_key] = form_id
+                            st.session_state["current_assignment_id"] = assignment_id
+                            st.session_state["current_target_name"] = target_name
                             st.rerun()
 
 
@@ -95,6 +99,8 @@ def show_form_fill_view(view_key, form_id_key):
         form_id_key: Session state key for current form ID
     """
     form_id = st.session_state[form_id_key]
+    assignment_id = st.session_state.get("current_assignment_id")
+    target_name = st.session_state.get("current_target_name")
     user_name = get_user_name()
     
     if not form_id:
@@ -111,18 +117,14 @@ def show_form_fill_view(view_key, form_id_key):
         back_button(view_key, form_id_key)
         return
     
-    # Check if user has already submitted
-    if form.has_user_submitted(user_name):
-        st.warning("You have already submitted this form. Each user can only submit a form once.")
-        back_button(view_key, form_id_key)
-        return
-    
     # Back button
     back_button(view_key, form_id_key)
     st.divider()
     
     # Display form header
     st.title(form.get_name())
+    if target_name:
+        st.subheader(f"Evaluating: {target_name}")
     if form.get_description():
         st.write(form.get_description())
     
@@ -150,6 +152,8 @@ def show_form_fill_view(view_key, form_id_key):
         if st.button("✓ Submit Form", type="primary", use_container_width=True):
             try:
                 form.submit_response(answers, user_name)
+                if assignment_id:
+                    update_assignment_status(assignment_id, 'completed')
                 st.success("Form submitted successfully!")
                 st.balloons()
                 
