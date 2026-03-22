@@ -1,11 +1,12 @@
 import streamlit as st
 from database_manager import(
-    get_all_employees, update_employee_role, ROLES, check_permission, delete_employee, 
-    add_group_to_employee, remove_group_from_employee, get_all_groups, add_group, delete_group
+    get_all_employees, update_employee_role, check_permission, delete_employee, 
+    add_group_to_employee, remove_group_from_employee, get_all_groups, add_group, delete_group,
+    get_all_roles, add_role, delete_role
 )
 from utils.common import delete_confirmation_dialog
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide", initial_sidebar_state="expanded")
 
 if "view" not in st.session_state:
     st.session_state.view = "employees"
@@ -15,6 +16,17 @@ try:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 except FileNotFoundError:
     st.error("CSS file not found. Please make sure 'style.css' is in the same folder.")
+
+# Hide the sidebar collapse/expand buttons to fix it open
+st.markdown(
+    """
+    <style>
+        [data-testid="collapsedControl"] {display: none;}
+        [data-testid="stSidebarCollapseButton"] {display: none;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # Dialog for managing all groups
@@ -56,12 +68,54 @@ def group_manager():
     else:
         st.info("No groups created yet")
 
+@st.dialog("Manage Roles")
+def role_manager():
+    st.write("**Create a new role:**")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        custom_role = st.text_input(
+            "New role name",
+            key="new_role_input",
+            label_visibility="collapsed",
+            placeholder="Enter new role name"
+        )
+    with col2:
+        if st.button("Create", key="create_role_btn", use_container_width=True):
+            if custom_role.strip():
+                add_role(custom_role.strip(), [])
+                st.success(f"Role '{custom_role.strip()}' created!")
+                st.rerun()
+            else:
+                st.error("Role name cannot be empty")
+    
+    st.divider()
+    
+    st.write("**All Roles:**")
+    all_roles = get_all_roles()
+    
+    if all_roles:
+        for role in all_roles:
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.write(f"• {role}")
+            with col2:
+                if st.button("Delete", key=f"delete_role_{role}", use_container_width=True):
+                    delete_role(role)
+                    st.success(f"Role '{role}' deleted!")
+                    st.rerun()
+    else:
+        st.info("No roles defined")
+
 
 #if check_permission("update"):
-col1, col2 = st.columns([4, 1])
+col1, col2, col3 = st.columns([3, 1, 1])
 with col1:
     st.header("Employees")
 with col2:
+    if st.button("Manage Roles", type="secondary", use_container_width=True):
+        role_manager()
+        
+with col3:
     if st.button("Manage Groups", type="secondary", use_container_width=True):
         group_manager()
 
@@ -148,7 +202,12 @@ if employees:
             #if check_permission("update"):
             disabled = False
 
-            role_options = list(ROLES.keys())
+            role_options = get_all_roles()
+            
+            # If the employee has a role but it's not in the DB's roles table, add it so the selectbox doesn't wipe it
+            if employee['role'] and employee['role'] not in role_options:
+                role_options.insert(0, employee['role'])
+                
             current_role_index = 0
             if employee['role'] in role_options:
                 current_role_index = role_options.index(employee['role'])
@@ -156,12 +215,13 @@ if employees:
             new_role = st.selectbox(
                 "Role",
                 options=role_options,
-                index=current_role_index,
+                index=current_role_index if role_options else None,
                 key=f"role_{employee['id']}",
                 label_visibility="collapsed",
-                disabled=disabled
+                disabled=disabled or not role_options
             )
-            if new_role != employee['role']:
+            # Ensure we only update if a valid new role was selected (not None from an empty list)
+            if new_role is not None and new_role != employee['role']:
                 update_employee_role(employee['id'], new_role)
                 st.rerun()
         with col6:

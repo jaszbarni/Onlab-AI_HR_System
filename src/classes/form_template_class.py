@@ -1,7 +1,7 @@
 import streamlit as st
 from database_manager import (
     get_form_by_id, get_questions_by_form, get_response_answers, get_form_responses,
-    submit_form_response, get_assigned_group, assign_group_to_campaign
+    submit_form_response, assign_group_to_campaign
 )
 
 
@@ -19,6 +19,8 @@ class FormTemplate:
     def load_form(self):
         """Load form data and questions from database."""
         self.form_data = get_form_by_id(self.form_id)
+        if self.form_data:
+            self.campaign_id = self.form_data[5]
         self.questions = get_questions_by_form(self.form_id)
     
     def get_form_info(self):

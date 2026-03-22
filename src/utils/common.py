@@ -4,13 +4,24 @@ import streamlit as st
 
 def setup_page():
     """Initialize page configuration and styling."""
-    st.set_page_config(layout="wide")
+    st.set_page_config(layout="wide", initial_sidebar_state="expanded")
     
     try:
         with open("Resources/style.css") as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
     except FileNotFoundError:
         st.error("CSS file not found. Please make sure 'style.css' is in the same folder.")
+
+    # Hide the sidebar collapse/expand buttons to fix it open
+    st.markdown(
+        """
+        <style>
+            [data-testid="collapsedControl"] {display: none;}
+            [data-testid="stSidebarCollapseButton"] {display: none;}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def check_user_initialized():

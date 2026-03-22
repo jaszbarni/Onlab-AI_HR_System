@@ -26,6 +26,4 @@ elif st.session_state.campaigns_view == "statistics":
 elif st.session_state.campaigns_view == "edit_form":
     show_edit_form(st.session_state.current_campaign_id)
 elif st.session_state.campaigns_view == "assign_group":
-    show_assign_group(st.session_state.current_form_id)
-
-
+    show_assign_group(st.session_state.current_campaign_id)

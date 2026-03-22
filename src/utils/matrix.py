@@ -1,10 +1,14 @@
 import streamlit as st
 import random
 import uuid
-from database_manager import get_all_employees, get_all_groups, add_form_assignments
+import difflib
+from database_manager import(
+    get_all_employees, get_all_form_templates, get_all_groups, 
+    add_form_assignments, get_forms_by_campaign, create_form_from_template
+)
 
-def show_assign_group(form_id):
-    """Show the view to assign a group to a form."""
+def show_assign_group(campaign_id):
+    """Show the view to assign a group to a campaign."""
 
     if st.button("← Back"):
         st.session_state.campaigns_view = "campaign_forms"
@@ -26,6 +30,19 @@ def show_assign_group(form_id):
 
     all_groups = get_all_groups()
     all_employees = get_all_employees()
+
+    # --- Initialize Manual Selection State ---
+    if 'employee_selections' not in st.session_state:
+        st.session_state.employee_selections = []
+        
+    if 'employee_slot_keys' not in st.session_state:
+        st.session_state.employee_slot_keys = [str(uuid.uuid4()) for _ in st.session_state.employee_selections]
+
+    current_selections = list(dict.fromkeys([s for s in st.session_state.employee_selections if s]))
+    max_evals = max(0, len(current_selections) - 1)
+
+    if st.session_state.get("num_select_boxes", 0) > max_evals:
+        st.session_state.num_select_boxes = max_evals
 
     col1, col2, col3 = st.columns([0.3, 0.3, 0.4], border=True)
     with col1:
@@ -59,7 +76,7 @@ def show_assign_group(form_id):
             st.number_input(
                 label="How many",
                 min_value=0,
-                max_value=len(all_employees)-1, #-1 because of the self eval
+                max_value=max_evals,
                 key="num_select_boxes",
                 disabled=st.session_state.get("auto_eval") == "No",
                 label_visibility="collapsed",
@@ -77,13 +94,6 @@ def show_assign_group(form_id):
     
     employee_names = [f"{employee['first_name']} {employee['last_name']}" for employee in employees]
 
-    # --- Initialize Manual Selection State ---
-    if 'employee_selections' not in st.session_state:
-        st.session_state.employee_selections = []
-        
-    if 'employee_slot_keys' not in st.session_state:
-        st.session_state.employee_slot_keys = [str(uuid.uuid4()) for _ in st.session_state.employee_selections]
-
     # --- Handle auto random selection ---
     is_auto_eval = st.session_state.get("auto_eval") == "Yes"
 
@@ -94,8 +104,6 @@ def show_assign_group(form_id):
     switched_from_auto = not is_auto_eval and st.session_state.was_auto_eval
     
     if switched_from_auto:
-        st.session_state.employee_selections = [""] # Reset when switching off auto
-        st.session_state.employee_slot_keys = [str(uuid.uuid4())] # Reset keys
         for key in list(st.session_state.keys()):
             if key.startswith("cell_"):
                 st.session_state[key] = False 
@@ -117,11 +125,6 @@ def show_assign_group(form_id):
                 # FIX: Force to False instead of deleting
                 st.session_state[key] = False
 
-        if switched_to_auto:
-            # Automatically select all employees only when switching to auto mode
-            st.session_state.employee_selections = employee_names.copy()
-            st.session_state.employee_slot_keys = [str(uuid.uuid4()) for _ in employee_names]
-        
         selected_employees = list(dict.fromkeys([s for s in st.session_state.get("employee_selections", []) if s]))
         
         if num_to_select > 0 and selected_employees:
@@ -197,72 +200,135 @@ def show_assign_group(form_id):
         selected_employees = [s for s in st.session_state.employee_selections if s]
         selected_employees = list(dict.fromkeys(selected_employees)) 
 
+        role_colors = {}
+        role_color_palette = [
+            "red", "orange", "blue", "green", "violet"
+        ]
+        next_color_index = 0
+
+        def get_role_color(role):
+            nonlocal next_color_index
+            if role not in role_colors:
+                role_colors[role] = role_color_palette[next_color_index % len(role_color_palette)]
+                next_color_index += 1
+            return role_colors[role]
+
+        def Get_employee_role(target_emp):
+            target_emp_data = next((emp for emp in all_employees if f"{emp['first_name']} {emp['last_name']}" == target_emp), None)
+            role = "Peer"
+            if target_emp_data:
+                role = target_emp_data.get("role") or "Peer"
+            return role
+
         if selected_employees:
             matrix_employees = list(selected_employees)
 
+            # Fetch templates once
+            if campaign_id:
+                campaign_forms_data = get_forms_by_campaign(campaign_id)
+            else:
+                campaign_forms_data = get_all_form_templates()
+                
+            base_form_templates = [{"id": t[0], "name": t[1]} for t in campaign_forms_data]
+
             # Header row
-            header_cols = st.columns(len(matrix_employees) + 1)
+            header_cols = st.columns(len(matrix_employees) + 1, gap="xsmall")
             header_cols[0].write("")
             for i, target_emp in enumerate(matrix_employees):
-                header_cols[i+1].write(target_emp)
-
-            def Get_employee_role(target_emp):
-                target_emp_data = next((emp for emp in all_employees if f"{emp['first_name']} {emp['last_name']}" == target_emp), None)
-                role = "Peer"
-                if target_emp_data:
-                    role = target_emp_data.get("role") or "Peer"
-                return role
-
-            
-            role_colors = {}
-            color_palette = [
-                "red", "orange", "yellow", "blue", "green", "violet"
-            ]
-            next_color_index = 0
+                role = Get_employee_role(target_emp)
+                with header_cols[i+1]:
+                    name_col1, name_col2 = st.columns(gap=None, spec=2)
+                    with name_col1:
+                        st.write(target_emp)
+                    with name_col2:
+                        st.badge(f"{role}", color=get_role_color(role))
 
             # Matrix rows
             for filler_emp in matrix_employees:
-                row_cols = st.columns(len(matrix_employees) + 1)
-                row_cols[0].write(filler_emp)
+                row_cols = st.columns(len(matrix_employees) + 1, gap="xsmall")
+                role = Get_employee_role(filler_emp)
+                with row_cols[0]:
+                    name_col1, name_col2 = st.columns(gap=None, spec=2)
+                    with name_col1:
+                        st.write(filler_emp)
+                    with name_col2:
+                        st.badge(f"{role}", color=get_role_color(role))
                 
                 for i, target_emp in enumerate(matrix_employees):
                     with row_cols[i+1]:
                         in_row_col1, in_row_col2 = st.columns([0.01, 0.9], vertical_alignment="center")
                         
-                        if filler_emp == target_emp:
-                            with in_row_col1:
-                                if st.session_state.get("self_eval") == "Yes":
-                                    st.session_state[f"cell_{filler_emp}_{target_emp}"] = True
-                                    st.checkbox("", key=f"cell_{filler_emp}_{target_emp}", disabled=True)
-                                else:
-                                    st.checkbox("", key=f"cell_{filler_emp}_{target_emp}")
-                            if st.session_state.get(f"cell_{filler_emp}_{target_emp}") == True:
-                                with in_row_col2:
-                                    st.badge("Self-evaluation", color="grey")
-                        else:
-                            with in_row_col1:
+                        with in_row_col1:
+                            if filler_emp == target_emp and st.session_state.get("self_eval") == "Yes":
+                                st.session_state[f"cell_{filler_emp}_{target_emp}"] = True
+                                st.checkbox("", key=f"cell_{filler_emp}_{target_emp}", disabled=True)
+                            else:
                                 st.checkbox("", key=f"cell_{filler_emp}_{target_emp}")
-                            if st.session_state.get(f"cell_{filler_emp}_{target_emp}") == True:
-                                with in_row_col2:
-                                    role = Get_employee_role(target_emp)
-                                    if role not in role_colors:
-                                        role_colors[role] = color_palette[next_color_index]
-                                        next_color_index = (next_color_index + 1) % len(color_palette)
-                                    st.badge(role, color=role_colors[role])
-            st.divider()
+
+                        if st.session_state.get(f"cell_{filler_emp}_{target_emp}"):
+                            with in_row_col2:
+                                if filler_emp == target_emp:
+                                    st.badge("Self-evaluation", color="grey")
+                                    target_role = "Self-evaluation"
+                                else:   
+                                    cell_form_templates = list(base_form_templates)
+                                    target_role = Get_employee_role(target_emp)
+                                
+                                    # Exclude self evaluation templates from peer evaluation options
+                                    cell_form_templates = [ft for ft in cell_form_templates if "self" not in ft["name"].lower()]
+                                    
+                                    template_names = [ft["name"] for ft in cell_form_templates]
+                                    
+                                    # Find the best match for the role among template names
+                                    best_match_name_list = difflib.get_close_matches(target_role, template_names, n=1, cutoff=0.1)
+                                    
+                                    if best_match_name_list:
+                                        best_match_name = best_match_name_list[0]
+                                        # Reorder the templates to put the best match first
+                                        best_match_template = next((t for t in cell_form_templates if t["name"] == best_match_name), None)
+                                        if best_match_template:
+                                            cell_form_templates.remove(best_match_template)
+                                            cell_form_templates.insert(0, best_match_template)
+
+                                    st.selectbox(
+                                        label="form type",
+                                        options=cell_form_templates,
+                                        format_func=lambda x: x["name"],
+                                        label_visibility="collapsed",
+                                        key=f"form_type_{filler_emp}_{target_emp}"
+                                    )
 
             if st.button("Assign Group", type="primary"):
                 send_form = []
+                self_eval_template = next((t for t in base_form_templates if "self" in t["name"].lower()), None)
+                
+                # Auto-create self-eval form for this campaign if it doesn't exist
+                if not self_eval_template and campaign_id:
+                    all_templates = get_all_form_templates()
+                    global_self_eval = next((t for t in all_templates if "self" in t[1].lower()), None)
+                    if global_self_eval:
+                        new_form_id = create_form_from_template(global_self_eval[0], campaign_id, "System")
+                        self_eval_template = {"id": new_form_id, "name": global_self_eval[1]}
+
                 for filler_emp in matrix_employees:
                     for target_emp in matrix_employees:
                         if st.session_state.get(f"cell_{filler_emp}_{target_emp}"):
+                            if target_emp == filler_emp:
+                                form_type = "Self-evaluation"
+                                form_id_to_assign = self_eval_template["id"] if self_eval_template else None
+                            else:
+                                selected_template = st.session_state.get(f"form_type_{filler_emp}_{target_emp}")
+                                form_type = selected_template["name"] if selected_template else Get_employee_role(target_emp)
+                                form_id_to_assign = selected_template["id"] if selected_template else None
+                            
                             send_form.append({
                                 "form_filler": filler_emp,
                                 "target": target_emp,
-                                "form_type": Get_employee_role(target_emp)
+                                "form_type": form_type,
+                                "form_id": form_id_to_assign
                             })
                 
-                add_form_assignments(form_id, send_form)
+                add_form_assignments(send_form)
                 st.session_state.send_form = send_form
                 st.success(f"{len(st.session_state.send_form)} assignments prepared and saved to database.")
                 st.write(st.session_state.send_form)
