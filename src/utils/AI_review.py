@@ -1,7 +1,8 @@
 import os
 import json
+import hashlib
 import streamlit as st
-from database_manager import get_all_employees, get_evaluations_for_employee
+from database_manager import check_permission, get_all_employees, get_evaluations_for_employee, get_ai_review, save_ai_review
 from dotenv import load_dotenv, find_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -39,7 +40,7 @@ def employee_list_view():
             with col3:
                 st.write(employee['email'])
             with col4:
-                if st.button("Generate Review", key=f"review_{employee['id']}", use_container_width=True):
+                if st.button("Generate Review", key=f"review_{employee['id']}", use_container_width=True, disabled=not check_permission("create")):
                     st.session_state.review_view = "review"
                     st.session_state.current_employee_id = employee['id']
                     st.rerun()
@@ -66,6 +67,28 @@ def review_view():
         return
 
     st.title(f"AI review for {employee['first_name']} {employee['last_name']}")
+
+    evals = get_evaluations_for_employee(employee_id)
+    eval_date = evals[0]['submitted_date'] if evals else "Nincs adat"
+    groups_str = ", ".join(employee.get("groups", [])) if employee.get("groups") else "Nincs"
+    
+    # Check if we already have a generated review that is up to date
+    evals_json = json.dumps(evals, ensure_ascii=False, sort_keys=True)
+    evals_hash = hashlib.sha256(evals_json.encode('utf-8')).hexdigest()
+    
+    saved_review = get_ai_review(employee_id)
+    
+    if saved_review and saved_review[1] == evals_hash:
+        st.markdown(
+            f"### Név: **{employee['first_name']} {employee['last_name']}**\t\tPozíció: **{employee['role']}**\n\n" + 
+            f"### Osztály: **{groups_str}**\t\t Értékelés dátuma: **{eval_date}**\n\n" + 
+            saved_review[0]
+        )
+        st.info(f"Betöltve a gyorsítótárból (Generálva: {saved_review[2]})")
+        
+        if not st.button("Regenerate Review"):
+            return
+        st.divider()
 
     #setup AI
     load_dotenv(find_dotenv())
@@ -112,14 +135,13 @@ def review_view():
                 {"messages": [{"role": "user", "content": f"Please summarize and evaluate the performance of {employee['first_name']} {employee['last_name']} (Employee ID: {employee_id}) based on their peer evaluations."}]}
             )
             
-            evals = get_evaluations_for_employee(employee_id)
-            eval_date = evals[0]['submitted_date'] if evals else "Nincs adat"
-            groups_str = ", ".join(employee.get("groups", [])) if employee.get("groups") else "Nincs"
+            review_text = response["messages"][-1].content
+            save_ai_review(employee_id, review_text, evals_hash)
             
             st.markdown(
                 f"### Név: **{employee['first_name']} {employee['last_name']}**\t\tPozíció: **{employee['role']}**\n\n" + 
                 f"### Osztály: **{groups_str}**\t\t Értékelés dátuma: **{eval_date}**\n\n" + 
-                response["messages"][-1].content
+                review_text
             )
                 
         except Exception as e:

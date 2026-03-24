@@ -10,8 +10,8 @@ check_user_initialized()
 initialize_session_state("review_view", "current_employee_id")
 
 # Main routing
-
-if st.session_state.review_view == "list":
-    employee_list_view()
-elif st.session_state.review_view == "review":
-    review_view()
+with st.spinner("Loading..."):
+    if st.session_state.review_view == "list":
+        employee_list_view()
+    elif st.session_state.review_view == "review":
+        review_view()

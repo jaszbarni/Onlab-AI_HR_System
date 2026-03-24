@@ -1,7 +1,7 @@
 """Views for form template management."""
 import streamlit as st
 from database_manager import (
-    create_form, update_form, get_all_form_templates, delete_form,
+    check_permission, create_form, update_form, get_all_form_templates, delete_form,
     add_question, update_question, delete_question
 )
 from classes.form_template_class import FormTemplate
@@ -53,7 +53,7 @@ def show_templates_list():
     with col1:
         st.header("Form Templates", text_alignment="left")
     with col2:
-        if st.button(label="Create Template", use_container_width=True, type="primary"):
+        if st.button(label="Create Template", use_container_width=True, type="primary", disabled=not check_permission("create")):
             st.session_state.forms_view = "edit_template"
             st.session_state.current_form_id = None
             st.rerun()
@@ -79,13 +79,13 @@ def show_templates_list():
                         st.caption(description)
                 
                 with col2:
-                    if st.button("Edit", key=f"edit_{template_id}", use_container_width=True):
+                    if st.button("Edit", key=f"edit_{template_id}", use_container_width=True, disabled=not check_permission("update")):
                         st.session_state.forms_view = "edit_template"
                         st.session_state.current_form_id = template_id
                         st.rerun()
                 
                 with col3:
-                    if st.button("Delete", key=f"delete_{template_id}", use_container_width=True):
+                    if st.button("Delete", key=f"delete_{template_id}", use_container_width=True, disabled=not check_permission("delete")):
                         delete_confirmation_dialog("template", delete_form, template_id)
 
 def show_edit_template():

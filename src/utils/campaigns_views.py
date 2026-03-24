@@ -1,9 +1,10 @@
 """Views for campaign and form management."""
 import streamlit as st
 from database_manager import (
-    create_form, update_form, create_campaign, get_all_campaigns, get_campaign_by_id, get_forms_by_campaign,
+    check_permission, create_form, update_form, create_campaign, get_all_campaigns, get_campaign_by_id, get_forms_by_campaign,
     update_campaign, delete_campaign, update_campaign_status,
-    add_question, update_question, delete_question, get_all_form_templates, delete_form, create_form_from_template
+    add_question, update_question, delete_question, get_all_form_templates, delete_form, create_form_from_template,
+    get_assignments_by_form
 )
 from classes.form_template_class import FormTemplate
 from utils.common import get_user_name, back_button, delete_confirmation_dialog
@@ -58,7 +59,7 @@ def show_campaigns_list():
     with col1:
         st.header("Campaigns", text_alignment="left")
     with col2:
-        if st.button(label="Create Campaign", use_container_width=True, type="primary"):
+        if st.button(label="Create Campaign", use_container_width=True, type="primary", disabled=not check_permission("create")):
             st.session_state.campaigns_view = "create_campaign"
             st.rerun()
 
@@ -90,13 +91,13 @@ def show_campaigns_list():
                         st.rerun()
                 
                 with col3:
-                    if st.button("Edit", key=f"edit_campaign_{campaign_id}", use_container_width=True):
+                    if st.button("Edit", key=f"edit_campaign_{campaign_id}", use_container_width=True, disabled=not check_permission("update")):
                         st.session_state.campaigns_view = "edit_campaign"
                         st.session_state.current_campaign_id = campaign_id
                         st.rerun()
                 
                 with col4:
-                    if st.button("Delete", key=f"delete_campaign_{campaign_id}", use_container_width=True):
+                    if st.button("Delete", key=f"delete_campaign_{campaign_id}", use_container_width=True, disabled=not check_permission("delete")):
                         delete_confirmation_dialog("campaign", delete_campaign, campaign_id)
 
 
@@ -251,12 +252,12 @@ def show_campaign_forms():
             st.caption(campaign_description)
     with col2:
         if status == "closed":
-            if st.button("Reopen campaign", use_container_width=True, type="primary"):
+            if st.button("Reopen campaign", use_container_width=True, type="primary", disabled=not check_permission("delete")):
                 update_campaign_status(campaign_id, "open")
                 st.success("Campaign reopened!")
                 st.rerun()
         else:
-            if st.button("Close campaign", use_container_width=True, type="primary"):
+            if st.button("Close campaign", use_container_width=True, type="primary", disabled=not check_permission("delete")):
                 update_campaign_status(campaign_id, "closed")
                 st.success("Campaign closed!")
                 st.rerun()
@@ -268,7 +269,7 @@ def show_campaign_forms():
     # Campaign actions
     col1, col2, col3, col4, col5 = st.columns(5, gap="small")
     with col1:
-        if st.button(label="Edit this campaign", use_container_width=True, disabled=status == "closed"):
+        if st.button(label="Edit this campaign", use_container_width=True, disabled=(status == "closed") | (not check_permission("update"))):
             st.session_state.campaigns_view = "edit_campaign"
             st.rerun()
     with col2:
@@ -276,15 +277,15 @@ def show_campaign_forms():
             st.session_state.campaigns_view = "statistics"
             st.rerun()
     with col3:
-        if st.button("Create new form", key="create_form", use_container_width=True, disabled=status == "closed"):
+        if st.button("Create new form", key="create_form", use_container_width=True, disabled=(status == "closed") | (not check_permission("create"))):
             st.session_state.campaigns_view = "edit_form"
             st.session_state.current_form_id = None
             st.rerun()
     with col4:
-        if st.button("Add templates", key="add_templates", use_container_width=True, disabled=status == "closed"):
+        if st.button("Add templates", key="add_templates", use_container_width=True, disabled=(status == "closed") | (not check_permission("update"))):
             add_template_dialog(campaign_id)
     with col5:
-        if st.button("Assign employees", key=f"assign_{campaign_id}", use_container_width=True, disabled=status == "closed", type="primary"):
+        if st.button("Assign employees", key=f"assign_{campaign_id}", use_container_width=True, disabled=(status == "closed") | (not check_permission("create")), type="primary"):
             st.session_state.campaigns_view = "assign_group"
             st.rerun()
     st.divider()
@@ -307,15 +308,26 @@ def show_campaign_forms():
                     st.markdown(f"#### {form_name}")
                     if form_description:
                         st.caption(form_description)
+
+                with col2:
+                    assignments = get_assignments_by_form(form_id)
+                    if assignments:
+                        with st.expander(f"Assignments ({len(assignments)})"):
+                            for assignment in assignments:
+                                a_id, filler_name, target_name, a_status = assignment
+                                status_emoji = "✅" if a_status == "completed" else "⏳"
+                                st.caption(f"{filler_name} ➡️ {target_name} {status_emoji}")
+                    else:
+                        st.caption("No assignments")
                 
                 with col3:
-                    if st.button("Edit", key=f"edit_{form_id}", use_container_width=True, disabled=status == "closed"):
+                    if st.button("Edit", key=f"edit_{form_id}", use_container_width=True, disabled=(status == "closed") | (not check_permission("update"))):
                         st.session_state.campaigns_view = "edit_form"
                         st.session_state.current_form_id = form_id
                         st.rerun()
                 
                 with col4:
-                    if st.button("Delete", key=f"delete_{form_id}", use_container_width=True, disabled=status == "closed"):
+                    if st.button("Delete", key=f"delete_{form_id}", use_container_width=True, disabled=(status == "closed") | (not check_permission("delete"))):
                         delete_confirmation_dialog("form", delete_form, form_id)
                 
 
@@ -565,7 +577,7 @@ def show_list_view(view_key, form_id_key):
 
     st.divider()
 
-    forms = get_all_forms()
+    forms = get_all_form_templates
 
     if not forms:
         st.info("No forms created yet. Click 'Add new form' to create one.")

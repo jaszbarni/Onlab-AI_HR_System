@@ -53,6 +53,7 @@ if "user" in st.session_state:
         pages.insert(0, st.Page("pages/1_Employees.py", title="Employees"))
 
 
+
 page = st.navigation(pages)
 
 # Sidebar-on megjelenítjük a bejelentkezett felhasználót

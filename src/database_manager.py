@@ -42,6 +42,17 @@ def get_all_roles():
         roles = [r[0] for r in cursor.fetchall()]
         return roles
 
+def get_all_roles_with_permissions():
+    """Get all available roles and their permissions from the database."""
+    with db_connection() as cursor:
+        cursor.execute('SELECT name, permissions FROM roles ORDER BY name')
+        roles = []
+        for row in cursor.fetchall():
+            permissions = row[1].split(',') if row[1] else []
+            permissions = [p.strip() for p in permissions if p.strip()]
+            roles.append({"name": row[0], "permissions": permissions})
+        return roles
+
 def check_permission(permission):
     user_role = st.session_state.user.role
     if not user_role:
@@ -143,6 +154,14 @@ def init_db():
             FOREIGN KEY (filler_employee_id) REFERENCES employees(id) ON DELETE CASCADE,
             FOREIGN KEY (target_employee_id) REFERENCES employees(id) ON DELETE CASCADE
         )""")
+        # Create ai_reviews table
+        cursor.execute("""CREATE TABLE IF NOT EXISTS ai_reviews (
+            employee_id INTEGER PRIMARY KEY,
+            review_text TEXT NOT NULL,
+            eval_hash TEXT NOT NULL,
+            generated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+        )""")
 
 def migrate_db():
     """Apply database migrations."""
@@ -202,6 +221,16 @@ def migrate_db():
             if "login_token" not in columns:
                 cursor.execute("ALTER TABLE employees ADD COLUMN login_token TEXT")
                 cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_login_token ON employees(login_token)")
+
+            # Check if ai_reviews table exists
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ai_reviews'")
+            if not cursor.fetchone():
+                cursor.execute("""CREATE TABLE ai_reviews (
+                    employee_id INTEGER PRIMARY KEY,
+                    review_text TEXT NOT NULL,
+                    eval_hash TEXT NOT NULL,
+                    generated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE)""")
 
     except Exception as e:
         # If migration fails, log the error
@@ -501,6 +530,21 @@ def get_assignments_for_user_by_email(email):
         
         return cursor.fetchall()
 
+def get_assignments_by_form(form_id):
+    """Get all form assignments for a specific form, including employee names."""
+    with db_connection() as cursor:
+        cursor.execute("""
+            SELECT fa.id, 
+                   f.first_name || ' ' || f.last_name AS filler_name,
+                   t.first_name || ' ' || t.last_name AS target_name,
+                   fa.status
+            FROM form_assignments fa
+            JOIN employees f ON fa.filler_employee_id = f.id
+            JOIN employees t ON fa.target_employee_id = t.id
+            WHERE fa.form_id = ?
+        """, (form_id,))
+        return cursor.fetchall()
+
 def update_assignment_status(assignment_id, status):
     """Update the status of a form assignment."""
     with db_connection() as cursor:
@@ -686,3 +730,16 @@ def get_evaluations_for_employee(employee_id):
                 })
                 
         return evaluations
+
+def get_ai_review(employee_id):
+    """Get the saved AI review for an employee."""
+    with db_connection() as cursor:
+        cursor.execute('SELECT review_text, eval_hash, generated_date FROM ai_reviews WHERE employee_id = ?', (employee_id,))
+        return cursor.fetchone()
+
+def save_ai_review(employee_id, review_text, eval_hash):
+    """Save or update an AI review for an employee."""
+    with db_connection() as cursor:
+        cursor.execute('''INSERT OR REPLACE INTO ai_reviews (employee_id, review_text, eval_hash, generated_date) 
+                          VALUES (?, ?, ?, CURRENT_TIMESTAMP)''', 
+                       (employee_id, review_text, eval_hash))

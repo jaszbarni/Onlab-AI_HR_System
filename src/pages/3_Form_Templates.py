@@ -7,8 +7,9 @@ setup_page()
 check_user_initialized()
 initialize_session_state("form_templates_view", "current_form_id")
 
-# Main routing
-if st.session_state.forms_view == "list":
-    show_templates_list()
-elif st.session_state.forms_view == "edit_template":
-    show_edit_template()
+with st.spinner("Loading..."):
+    # Main routing
+    if st.session_state.forms_view == "list":
+        show_templates_list()
+    elif st.session_state.forms_view == "edit_template":
+        show_edit_template()
