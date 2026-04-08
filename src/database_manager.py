@@ -14,6 +14,7 @@ DB_PATH = os.environ.get("DATABASE_PATH", "data.db")
 def db_connection():
     """Context manager for database connections."""
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA foreign_keys = ON;")
     try:
         yield conn.cursor()
         conn.commit()
@@ -54,6 +55,8 @@ def get_all_roles_with_permissions():
         return roles
 
 def check_permission(permission):
+    if "user" not in st.session_state:
+        return False
     user_role = st.session_state.user.role
     if not user_role:
         return False
@@ -122,6 +125,7 @@ def init_db():
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     form_id INTEGER NOT NULL,
                     question_text TEXT NOT NULL,
+                    question_description TEXT,
                     question_type TEXT NOT NULL,
                     min_value INTEGER,
                     max_value INTEGER,
@@ -214,6 +218,12 @@ def migrate_db():
             if cursor.fetchone()[0] == 0:
                 cursor.execute("INSERT INTO forms (name, description, created_by, is_template) VALUES (?, ?, ?, ?)",
                                ('Self-evaluation', 'Default template for self-evaluations', 'System', True))
+                               
+            # Check if question_description column exists in questions table
+            cursor.execute("PRAGMA table_info(questions)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if "question_description" not in columns:
+                cursor.execute("ALTER TABLE questions ADD COLUMN question_description TEXT")
 
             # Check if login_token column exists in employees table
             cursor.execute("PRAGMA table_info(employees)")
@@ -453,9 +463,10 @@ def create_form_from_template(template_id, campaign_id, created_by):
             add_question(
                 form_id=new_form_id,
                 question_text=q[1],
-                question_type=q[2],
-                min_value=q[3],
-                max_value=q[4]
+                question_description=q[2],
+                question_type=q[3],
+                min_value=q[4],
+                max_value=q[5]
             )
         
         return new_form_id
@@ -521,10 +532,12 @@ def get_assignments_for_user_by_email(email):
         cursor.execute("""
             SELECT fa.id, f.id, f.name, f.description, 
                    t.first_name || ' ' || t.last_name AS target_name,
-                   fa.status
+                   fa.status,
+                   c.status AS campaign_status
             FROM form_assignments fa
             JOIN forms f ON fa.form_id = f.id
             JOIN employees t ON fa.target_employee_id = t.id
+            LEFT JOIN campaigns c ON f.campaign_id = c.id
             WHERE fa.filler_employee_id = ?
         """, (employee_id,))
         
@@ -583,7 +596,7 @@ def assign_group_to_campaign(campaign_id, group_name):
     with db_connection() as cursor:
         cursor.execute('UPDATE forms SET assigned_group = ? WHERE id = ?', (group_name, campaign_id))
 
-def add_question(form_id, question_text, question_type, min_value=None, max_value=None):
+def add_question(form_id, question_text, question_description, question_type, min_value=None, max_value=None):
     """Add a question to a form."""
     with db_connection() as cursor:
         # Get the max order for this form
@@ -591,23 +604,23 @@ def add_question(form_id, question_text, question_type, min_value=None, max_valu
         max_order = cursor.fetchone()[0]
         next_order = (max_order + 1) if max_order is not None else 0
         
-        cursor.execute('INSERT INTO questions (form_id, question_text, question_type, min_value, max_value, question_order) VALUES (?, ?, ?, ?, ?, ?)',
-                       (form_id, question_text, question_type, min_value, max_value, next_order))
+        cursor.execute('INSERT INTO questions (form_id, question_text, question_description, question_type, min_value, max_value, question_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                       (form_id, question_text, question_description, question_type, min_value, max_value, next_order))
         question_id = cursor.lastrowid
         return question_id
 
 def get_questions_by_form(form_id):
     """Get all questions for a form."""
     with db_connection() as cursor:
-        cursor.execute('SELECT id, question_text, question_type, min_value, max_value, question_order FROM questions WHERE form_id = ? ORDER BY question_order', (form_id,))
+        cursor.execute('SELECT id, question_text, question_description, question_type, min_value, max_value, question_order FROM questions WHERE form_id = ? ORDER BY question_order', (form_id,))
         questions = cursor.fetchall()
         return questions
 
-def update_question(question_id, question_text, question_type, min_value=None, max_value=None):
+def update_question(question_id, question_text, question_description, question_type, min_value=None, max_value=None):
     """Update a question."""
     with db_connection() as cursor:
-        cursor.execute('UPDATE questions SET question_text = ?, question_type = ?, min_value = ?, max_value = ? WHERE id = ?',
-                       (question_text, question_type, min_value, max_value, question_id))
+        cursor.execute('UPDATE questions SET question_text = ?, question_description = ?, question_type = ?, min_value = ?, max_value = ? WHERE id = ?',
+                       (question_text, question_description, question_type, min_value, max_value, question_id))
 
 def delete_question(question_id):
     """Delete a question."""

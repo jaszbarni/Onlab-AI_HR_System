@@ -4,10 +4,7 @@ import hashlib
 import streamlit as st
 from database_manager import check_permission, get_all_employees, get_evaluations_for_employee, get_ai_review, save_ai_review
 from dotenv import load_dotenv, find_dotenv
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.tools import tool
-from langchain.agents import create_agent
+from utils.common import set_state
 
 def employee_list_view():
     st.title("AI reviews")
@@ -40,19 +37,18 @@ def employee_list_view():
             with col3:
                 st.write(employee['email'])
             with col4:
-                if st.button("Generate Review", key=f"review_{employee['id']}", use_container_width=True, disabled=not check_permission("create")):
-                    st.session_state.review_view = "review"
-                    st.session_state.current_employee_id = employee['id']
-                    st.rerun()
+                if st.button("Get Review", key=f"review_{employee['id']}", use_container_width=True, disabled=not check_permission("create")):
+                    set_state(review_view="review", current_employee_id=employee['id'])
     else:
         st.info("No employees found.")
 
 def review_view():
 
     if st.button("← Back to employee list"):
-        st.session_state.review_view = "list"
-        st.session_state.current_employee_id = None
-        st.rerun()
+        set_state(review_view="list", current_employee_id=None)
+    with st.sidebar:
+        if st.button("← Back to employee list", use_container_width=True):
+            set_state(review_view="list", current_employee_id=None)
 
     employee_id = st.session_state.current_employee_id
     if not employee_id:
@@ -80,57 +76,75 @@ def review_view():
     
     if saved_review and saved_review[1] == evals_hash:
         st.markdown(
-            f"### Név: **{employee['first_name']} {employee['last_name']}**\t\tPozíció: **{employee['role']}**\n\n" + 
-            f"### Osztály: **{groups_str}**\t\t Értékelés dátuma: **{eval_date}**\n\n" + 
-            saved_review[0]
-        )
+                f"### Név: **{employee['first_name']} {employee['last_name']}**\n" +
+                f"### Pozíció: **{employee['role']}**\n" + 
+                f"### Osztály: **{groups_str}**\n" + 
+                f"### Értékelés dátuma: **{eval_date}**\n\n" + 
+                saved_review[0]
+            )
         st.info(f"Betöltve a gyorsítótárból (Generálva: {saved_review[2]})")
         
         if not st.button("Regenerate Review"):
             return
         st.divider()
-
-    #setup AI
-    load_dotenv(find_dotenv())
-
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key and hasattr(st, "secrets") and "OPENROUTER_API_KEY" in st.secrets:
-        api_key = st.secrets["OPENROUTER_API_KEY"]
-        
-    if not api_key:
-        st.error("API Key is missing! Please set `OPENROUTER_API_KEY` in your `.env` or `.streamlit/secrets.toml` file.")
-        return
-
-    llm = ChatOpenAI(
-        model="nvidia/nemotron-3-super-120b-a12b:free",
-        api_key=api_key,
-        base_url="https://openrouter.ai/api/v1",
-    )
-
-    @tool
-    def fetch_evaluations(employee_id: int) -> str:
-        """Get all evaluations and reviews submitted by other employees for a specific employee."""
-        return json.dumps(get_evaluations_for_employee(employee_id), ensure_ascii=False)
-    
-    @tool
-    def get_template() -> str:
-        """Get the text template that the AI review should follow."""
-        # Construct absolute path relative to this script's location
-        template_path = os.path.join(os.path.dirname(__file__), "AI_template.txt")
-        with open(template_path, mode="r", encoding="utf-8") as f:
-            return f.read()
-
-    tools = [fetch_evaluations, get_template]
-
-    agent = create_agent(llm, tools, system_prompt=
-                         "You are an HR assistant that helps evaluate employees. " \
-                         "Use the provided tools to fetch evaluations and summarize them according to the template. " \
-                         "If no evaluations exist, state that clearly." \
-                         "Use hungarian as your main language and answer in hungarian" \
-                         "You will make the answer in Markdown format")
     
     with st.spinner("Generating AI review..."):
         try:
+            from langchain_openai import ChatOpenAI
+            from langchain_core.tools import tool
+            from langchain.agents import create_agent
+
+            #setup AI
+            load_dotenv(find_dotenv())
+
+            api_key = os.environ.get("OPENROUTER_API_KEY")
+            if not api_key and hasattr(st, "secrets") and "OPENROUTER_API_KEY" in st.secrets:
+                api_key = st.secrets["OPENROUTER_API_KEY"]
+                
+            if not api_key:
+                st.error("API Key is missing! Please set `OPENROUTER_API_KEY` in your `.env` or `.streamlit/secrets.toml` file.")
+                return
+
+            llm = ChatOpenAI(
+                #model="nvidia/nemotron-3-super-120b-a12b:free",
+                model="qwen/qwen3.6-plus:free",
+                #model="qwen/qwen3.6-plus:free",
+                #model="qwen/qwen3-next-80b-a3b-instruct:free",
+                #model="meta-llama/llama-3.2-3b-instruct:free",
+                #model="meta-llama/llama-3.3-70b-instruct:free",
+                #model="google/gemini-2.0-flash-lite-preview-02-05:free", 
+                #model="openai/gpt-oss-20b:free",
+                api_key=api_key,
+                base_url="https://openrouter.ai/api/v1",
+                max_retries=5, # Automatically retry on 429 rate limit errors
+            )
+
+            @tool
+            def fetch_evaluations(employee_id: int) -> str:
+                """Get all evaluations and reviews submitted by other employees for a specific employee."""
+                return json.dumps(get_evaluations_for_employee(employee_id), ensure_ascii=False)
+            
+            @tool
+            def get_template() -> str:
+                """Get the text template that the AI review should follow."""
+                # Construct absolute path relative to this script's location
+                template_path = os.path.join(os.path.dirname(__file__), "AI_template.md")
+                with open(template_path, mode="r", encoding="utf-8") as f:
+                    return f.read()
+
+            tools = [fetch_evaluations, get_template]
+
+            agent = create_agent(llm, tools, system_prompt=(
+                                "You are an expert HR evaluation assistant. Your sole purpose is to process peer evaluations "
+                                "and output a highly structured Markdown report in Hungarian.\n\n"
+                                "CRITICAL INSTRUCTIONS:\n"
+                                "1. You MUST use the `fetch_evaluations` tool to get the raw data.\n"
+                                "2. You MUST use the `get_template` tool to get the strict formatting rules and the exact layout.\n"
+                                "3. You MUST completely omit the employee's name from the final output.\n"
+                                "4. Output ONLY the filled Markdown template. Do not include conversational filler, greetings, or explanations.\n"
+                                "5. If there are no evaluations available, output: 'Nincs elegendő adat az értékeléshez.'"
+            ))
+
             response = agent.invoke(
                 {"messages": [{"role": "user", "content": f"Please summarize and evaluate the performance of {employee['first_name']} {employee['last_name']} (Employee ID: {employee_id}) based on their peer evaluations."}]}
             )
@@ -139,8 +153,11 @@ def review_view():
             save_ai_review(employee_id, review_text, evals_hash)
             
             st.markdown(
-                f"### Név: **{employee['first_name']} {employee['last_name']}**\t\tPozíció: **{employee['role']}**\n\n" + 
-                f"### Osztály: **{groups_str}**\t\t Értékelés dátuma: **{eval_date}**\n\n" + 
+                f"### Név: **{employee['first_name']} {employee['last_name']}**\n" +
+                f"### Pozíció: **{employee['role']}**\n" + 
+                f"### Osztály: **{groups_str}**\n" + 
+                f"### Értékelés dátuma: **{eval_date}**\n" + 
+                "---\n\n" +
                 review_text
             )
                 

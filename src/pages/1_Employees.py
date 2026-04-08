@@ -81,7 +81,7 @@ def role_manager():
             placeholder="Enter new role name"
         )
     with col2:
-        if st.button("Create", key="create_role_btn", use_container_width=True):
+        if st.button("Create", key="create_role_btn", use_container_width=True, disabled=not check_permission("create")):
             if custom_role.strip():
                 add_role(custom_role.strip(), [])
                 st.success(f"Role '{custom_role.strip()}' created!")
@@ -115,7 +115,7 @@ def role_manager():
                     st.rerun()
                 
                 st.divider()
-                if st.button("Delete Role", key=f"delete_role_{role}", type="primary", use_container_width=True):
+                if st.button("Delete Role", key=f"delete_role_{role}", type="primary", use_container_width=True, disabled=not check_permission("delete")):
                     delete_role(role)
                     st.success(f"Role '{role}' deleted!")
                     st.rerun()
@@ -168,8 +168,8 @@ def edit_groups_dialog(employee_id, employee_name, current_groups):
         st.info("No groups available")
 
 
-with st.spinner("Loading..."):
-    #if check_permission("update"):
+
+if check_permission("update"):
     col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
         st.header("Employees")
@@ -181,79 +181,79 @@ with st.spinner("Loading..."):
         if st.button("Manage Groups", type="secondary", use_container_width=True, disabled=not check_permission("create")):
             group_manager()
 
-    st.divider()
-    
-    employees = get_all_employees()
-    
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
-    with col1:
-        st.caption("**ID**", text_alignment="left")
-    with col2:
-        st.caption("**Name**", text_alignment="left")
-    with col3:
-        st.caption("**Email**", text_alignment="left")
-    with col4:
-        st.caption("**Groups**", text_alignment="left")
-    with col5:
-        st.caption("**Role**", text_alignment="center")
-    if check_permission("update"):
+st.divider()
+
+employees = get_all_employees()
+
+col1, col2, col3, col4, col5, col6 = st.columns(6)
+with col1:
+    st.caption("**ID**", text_alignment="left")
+with col2:
+    st.caption("**Name**", text_alignment="left")
+with col3:
+    st.caption("**Email**", text_alignment="left")
+with col4:
+    st.caption("**Groups**", text_alignment="left")
+with col5:
+    st.caption("**Role**", text_alignment="center")
+if check_permission("update"):
+    with col6:
+        st.caption("**Actions**", text_alignment="center")
+
+if employees:
+    for employee in employees:
+        col1, col2, col3, col4, col5, col6 = st.columns(6, vertical_alignment="center")
+        with col1:
+            st.write(f"{employee['id']}")
+        with col2:
+            st.write(f"**{employee['first_name']} {employee['last_name']}**")
+        with col3:
+            st.write(employee['email'])
+        with col4:
+            with st.container(border=True):
+                if employee['groups']:
+                    for group in employee['groups']:
+                        st.write(f"  • {group}")
+                else:
+                    st.write("No groups assigned")
+        with col5:
+            disabled = True
+            if check_permission("update"):
+                disabled = False
+
+            role_options = get_all_roles()
+            
+            # If the employee has a role but it's not in the DB's roles table, add it so the selectbox doesn't wipe it
+            if employee['role'] and employee['role'] not in role_options:
+                role_options.insert(0, employee['role'])
+                
+            current_role_index = 0
+            if employee['role'] in role_options:
+                current_role_index = role_options.index(employee['role'])
+            
+            new_role = st.selectbox(
+                "Role",
+                options=role_options,
+                index=current_role_index if role_options else None,
+                key=f"role_{employee['id']}",
+                label_visibility="collapsed",
+                disabled=disabled or not role_options
+            )
+            # Ensure we only update if a valid new role was selected (not None from an empty list)
+            if new_role is not None and new_role != employee['role']:
+                update_employee_role(employee['id'], new_role)
+                st.rerun()
         with col6:
-            st.caption("**Actions**", text_alignment="center")
+            col_edit, col_delete = st.columns(2)
+            #if check_permission("update"):
+            if check_permission("update"):
+                with col_edit:
+                    if st.button(label="Edit groups", key=f"edit_{employee['id']}", disabled=not check_permission("update")):
+                        edit_groups_dialog(employee['id'], f"{employee['first_name']} {employee['last_name']}", employee['groups'])
+                #if check_permission("delete"):
+                with col_delete:
+                    if st.button(label="❌", key=f"delete_{employee['id']}", disabled=not check_permission("delete")):
+                        delete_confirmation_dialog("employee", delete_employee, employee['id'])
     
-    if employees:
-        for employee in employees:
-            col1, col2, col3, col4, col5, col6 = st.columns(6, vertical_alignment="center")
-            with col1:
-                st.write(f"{employee['id']}")
-            with col2:
-                st.write(f"**{employee['first_name']} {employee['last_name']}**")
-            with col3:
-                st.write(employee['email'])
-            with col4:
-                with st.container(border=True):
-                    if employee['groups']:
-                        for group in employee['groups']:
-                            st.write(f"  • {group}")
-                    else:
-                        st.write("No groups assigned")
-            with col5:
-                disabled = True
-                if check_permission("update"):
-                    disabled = False
-    
-                role_options = get_all_roles()
-                
-                # If the employee has a role but it's not in the DB's roles table, add it so the selectbox doesn't wipe it
-                if employee['role'] and employee['role'] not in role_options:
-                    role_options.insert(0, employee['role'])
-                    
-                current_role_index = 0
-                if employee['role'] in role_options:
-                    current_role_index = role_options.index(employee['role'])
-                
-                new_role = st.selectbox(
-                    "Role",
-                    options=role_options,
-                    index=current_role_index if role_options else None,
-                    key=f"role_{employee['id']}",
-                    label_visibility="collapsed",
-                    disabled=disabled or not role_options
-                )
-                # Ensure we only update if a valid new role was selected (not None from an empty list)
-                if new_role is not None and new_role != employee['role']:
-                    update_employee_role(employee['id'], new_role)
-                    st.rerun()
-            with col6:
-                col_edit, col_delete = st.columns(2)
-                #if check_permission("update"):
-                if check_permission("update"):
-                    with col_edit:
-                        if st.button(label="Edit groups", key=f"edit_{employee['id']}", disabled=not check_permission("update")):
-                            edit_groups_dialog(employee['id'], f"{employee['first_name']} {employee['last_name']}", employee['groups'])
-                    #if check_permission("delete"):
-                    with col_delete:
-                        if st.button(label="❌", key=f"delete_{employee['id']}", disabled=not check_permission("delete")):
-                            delete_confirmation_dialog("employee", delete_employee, employee['id'])
-    
-    else:
-        st.info("No employees found.")
+else:
+    st.info("No employees found.")

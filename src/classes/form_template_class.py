@@ -88,7 +88,7 @@ class FormTemplate:
         if not question:
             return False, "Question not found"
         
-        question_id, question_text, question_type, min_val, max_val, order = question
+        question_id, question_text, question_description, question_type, min_val, max_val, order = question
         
         # Allow empty answers for now (can be made optional/required later)
         if answer == "" or answer is None:

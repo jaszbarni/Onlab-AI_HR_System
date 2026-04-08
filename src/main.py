@@ -38,9 +38,11 @@ if "token" in st.query_params:
 
 #st.button("Delete all employees", on_click=delete_all_employees)
 
-
 # Configure sidebar navigation dynamically based on role
-pages = [st.Page("pages/5_Generate_link.py", title="Generate link")]
+pages = []
+
+if "user" not in st.session_state:
+    pages.append(st.Page("pages/5_Generate_link.py", title="Generate link"))
 
 if "user" in st.session_state:
     pages.insert(0, st.Page("pages/4_Forms.py", title="Forms"))
@@ -71,6 +73,7 @@ if "user" in st.session_state:
 st.title("HR System", text_alignment="center")
 #st.button("Delete all forms", on_click=delete_all_forms())
 
-st.json({k: str(v) for k, v in st.session_state.items()})
+#st.json({k: str(v) for k, v in st.session_state.items()})
+
 
 page.run()

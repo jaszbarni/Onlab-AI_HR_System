@@ -2,15 +2,16 @@
 import streamlit as st
 from database_manager import get_all_forms, get_assignments_for_user_by_email, update_assignment_status, delete_all_assignments, check_permission
 from classes.form_template_class import FormTemplate
-from utils.common import get_user_name, back_button, delete_confirmation_dialog
+from utils.common import get_user_name, back_button, delete_confirmation_dialog, set_state
 
 
-def render_question_input(question_id, question_text, question_type, min_val, max_val):
+def render_question_input(question_id, question_text, question_description, question_type, min_val, max_val):
     """Render an input field for a question.
     
     Args:
         question_id: ID of the question
         question_text: Text of the question
+        question_description: Description of the question
         question_type: Type of question (Text Box, Rating, etc.)
         min_val: Minimum value for ratings
         max_val: Maximum value for ratings
@@ -28,13 +29,19 @@ def render_question_input(question_id, question_text, question_type, min_val, ma
             st.session_state[key] = ""
     
     st.markdown(f"**{question_text}**")
-    
+    if question_description:
+        st.markdown(f"{question_description}")
+
     if question_type == "Text Box":
         answer = st.text_area("", key=key, height=100)
     elif question_type == "0-5 Rating":
-        answer = st.slider("", min_value=0, max_value=5, value=st.session_state[key], key=key)
+        col1, col2 = st.columns(2)
+        with col1:
+            answer = st.slider("", min_value=0, max_value=5, value=st.session_state[key], key=key)
     elif question_type == "1-10 Rating":
-        answer = st.slider("", min_value=1, max_value=10, value=st.session_state[key], key=key)
+        col1, col2 = st.columns(2)
+        with col1:
+            answer = st.slider("", min_value=1, max_value=10, value=st.session_state[key], key=key)
     elif question_type == "Multiple Choice":
         answer = st.text_input("Enter your choice:", key=key)
     else:
@@ -65,8 +72,9 @@ def show_list_view(view_key, form_id_key):
         st.subheader(f"Available Forms ({len(assignments)})")
         
         for assignment in assignments:
-            assignment_id, form_id, name, description, target_name, status = assignment
+            assignment_id, form_id, name, description, target_name, status, campaign_status = assignment
             user_has_submitted = (status == 'completed')
+            campaign_closed = (campaign_status == 'closed')
             
             with st.container(border=True):
                 col1, col2 = st.columns([0.85, 0.15])
@@ -78,17 +86,17 @@ def show_list_view(view_key, form_id_key):
                         st.caption(description)
                     if user_has_submitted:
                         st.caption("✓ You have already submitted this form")
+                    elif campaign_closed:
+                        st.caption("🔒 This campaign is closed")
                 
                 with col2:
                     if user_has_submitted:
                         st.button("✓ Completed", key=f"fillout_{assignment_id}", use_container_width=True, disabled=True)
+                    elif campaign_closed:
+                        st.button("🔒 Closed", key=f"fillout_{assignment_id}", use_container_width=True, disabled=True)
                     else:
                         if st.button("📝 Fill Out", key=f"fillout_{assignment_id}", use_container_width=True):
-                            st.session_state[view_key] = "fill"
-                            st.session_state[form_id_key] = form_id
-                            st.session_state["current_assignment_id"] = assignment_id
-                            st.session_state["current_target_name"] = target_name
-                            st.rerun()
+                            set_state(**{view_key: "fill", form_id_key: form_id, "current_assignment_id": assignment_id, "current_target_name": target_name})
 
 
 def show_form_fill_view(view_key, form_id_key):
@@ -105,7 +113,8 @@ def show_form_fill_view(view_key, form_id_key):
     
     if not form_id:
         st.error("No form selected.")
-        back_button(view_key, form_id_key)
+        if st.button("← Back"):
+            set_state(**{view_key: "list", form_id_key: None, "current_assignment_id": None, "current_target_name": None})
         return
     
     # Load form
@@ -114,11 +123,13 @@ def show_form_fill_view(view_key, form_id_key):
     
     if not form_info:
         st.error("Form not found.")
-        back_button(view_key, form_id_key)
+        if st.button("← Back"):
+            set_state(**{view_key: "list", form_id_key: None, "current_assignment_id": None, "current_target_name": None})
         return
     
     # Back button
-    back_button(view_key, form_id_key)
+    if st.button("← Back"):
+        set_state(**{view_key: "list", form_id_key: None, "current_assignment_id": None, "current_target_name": None})
     st.divider()
     
     # Display form header
@@ -140,8 +151,8 @@ def show_form_fill_view(view_key, form_id_key):
     questions = form.get_questions()
     
     for question in questions:
-        question_id, question_text, question_type, min_val, max_val, order = question
-        answer = render_question_input(question_id, question_text, question_type, min_val, max_val)
+        question_id, question_text, question_description, question_type, min_val, max_val, order = question
+        answer = render_question_input(question_id, question_text, question_description, question_type, min_val, max_val)
         answers[question_id] = answer
         st.divider()
     
@@ -163,14 +174,10 @@ def show_form_fill_view(view_key, form_id_key):
                         del st.session_state[key]
                 
                 # Go back to list
-                st.session_state[view_key] = "list"
-                st.session_state[form_id_key] = None
-                st.rerun()
+                set_state(**{view_key: "list", form_id_key: None, "current_assignment_id": None, "current_target_name": None})
             except Exception as e:
                 st.error(f"Error submitting form: {str(e)}")
     
     with col2:
         if st.button("✕ Cancel", use_container_width=True):
-            st.session_state[view_key] = "list"
-            st.session_state[form_id_key] = None
-            st.rerun()
+            set_state(**{view_key: "list", form_id_key: None, "current_assignment_id": None, "current_target_name": None})

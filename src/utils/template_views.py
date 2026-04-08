@@ -5,19 +5,21 @@ from database_manager import (
     add_question, update_question, delete_question
 )
 from classes.form_template_class import FormTemplate
-from utils.common import get_user_name, back_button, delete_confirmation_dialog
+from utils.common import get_user_name, back_button, delete_confirmation_dialog, set_state
 
-def render_question_editor(question_id, question_text, question_type, min_val, max_val, form_id, is_closed=False):
+def render_question_editor(question_id, question_text, question_description, question_type, min_val, max_val, form_id, is_closed=False):
     """Render editor for a question.
     
     Returns:
         bool: True if question was updated
     """
     with st.expander(f"Question: {question_text[:50]}{'...' if len(question_text) > 50 else ''}", expanded=False):
-        col1, col2, col3 = st.columns([0.6, 0.2, 0.2])
+        col1, col2, col3 = st.columns([0.4, 0.4, 0.2])
         
         with col1:
-            new_text = st.text_input("Question Text", value=question_text, key=f"text_{question_id}", disabled=is_closed)
+            new_text = st.text_input("Question Title", value=question_text, key=f"text_{question_id}", disabled=is_closed)
+            new_desc = st.text_area("Question Description", value=question_description or "", key=f"desc_{question_id}", disabled=is_closed)
+        with col2:
             new_type = st.selectbox(
                 "Question Type",
                 ["Text Box", "0-5 Rating", "1-10 Rating"],
@@ -41,7 +43,7 @@ def render_question_editor(question_id, question_text, question_type, min_val, m
                 else:
                     min_v, max_v = None, None
                 
-                update_question(question_id, new_text, new_type, min_v, max_v)
+                update_question(question_id, new_text, new_desc, new_type, min_v, max_v)
                 st.success("Question updated!")
                 st.rerun()
                 return True
@@ -49,14 +51,12 @@ def render_question_editor(question_id, question_text, question_type, min_val, m
 
 def show_templates_list():
     """Display list of all form templates."""
-    col1, col2 = st.columns([0.8, 0.2])
+    col1, col2 = st.columns([0.6, 0.2])
     with col1:
         st.header("Form Templates", text_alignment="left")
     with col2:
         if st.button(label="Create Template", use_container_width=True, type="primary", disabled=not check_permission("create")):
-            st.session_state.forms_view = "edit_template"
-            st.session_state.current_form_id = None
-            st.rerun()
+            set_state(forms_view="edit_template", current_form_id=None)
 
     st.divider()
 
@@ -80,9 +80,7 @@ def show_templates_list():
                 
                 with col2:
                     if st.button("Edit", key=f"edit_{template_id}", use_container_width=True, disabled=not check_permission("update")):
-                        st.session_state.forms_view = "edit_template"
-                        st.session_state.current_form_id = template_id
-                        st.rerun()
+                        set_state(forms_view="edit_template", current_form_id=template_id)
                 
                 with col3:
                     if st.button("Delete", key=f"delete_{template_id}", use_container_width=True, disabled=not check_permission("delete")):
@@ -95,9 +93,7 @@ def show_edit_template():
 
     # Back button
     if st.button("← Back to Templates"):
-        st.session_state.forms_view = "list"
-        st.session_state.current_form_id = None
-        st.rerun()
+        set_state(forms_view="list", current_form_id=None)
     st.divider()
 
     # Form Details Section
@@ -113,9 +109,8 @@ def show_edit_template():
         if st.button("Create Template", type="primary"):
             if form_name.strip():
                 new_form_id = create_form(form_name, form_description, get_user_name(), is_template=True)
-                st.session_state.current_form_id = new_form_id
                 st.success("Template created!")
-                st.rerun()
+                set_state(current_form_id=new_form_id)
             else:
                 st.error("Template name cannot be empty")
     else:
@@ -150,10 +145,11 @@ def show_edit_template():
 
         # Add new question section
         st.markdown("##### Add New Question")
-        col1, col2, col3 = st.columns([0.5, 0.25, 0.25])
+        col1, col2, col3 = st.columns([0.4, 0.4, 0.2])
         
         with col1:
-            new_question_text = st.text_input("Question Text", placeholder="e.g., How satisfied are you?", key="new_question_text", label_visibility="collapsed")
+            new_question_text = st.text_input("Question Title", placeholder="e.g., How satisfied are you?", key="new_question_text", label_visibility="collapsed")
+            new_question_desc = st.text_area("Question Description", placeholder="Additional details...", key="new_question_desc", label_visibility="collapsed")
         
         with col2:
             new_question_type = st.selectbox(
@@ -174,7 +170,7 @@ def show_edit_template():
                     else:
                         min_v, max_v = None, None
                     
-                    add_question(form_id, new_question_text, new_question_type, min_v, max_v)
+                    add_question(form_id, new_question_text, new_question_desc, new_question_type, min_v, max_v)
                     st.success("Question added!")
                     st.rerun()
                 else:
@@ -189,11 +185,12 @@ def show_edit_template():
             st.markdown("#### Existing Questions")
             
             for idx, question in enumerate(questions):
-                question_id, question_text, question_type, min_val, max_val, order = question
-                render_question_editor(question_id, question_text, question_type, min_val, max_val, form_id)
+                question_id, question_text, question_description, question_type, min_val, max_val, order = question
+                render_question_editor(question_id, question_text, question_description, question_type, min_val, max_val, form_id)
         else:
             st.info("No questions added yet.")
 
         if st.button("Save Template Details", type="primary"):  
             update_form(form_id, form_name, form_description)
             st.success("Template details updated!")
+

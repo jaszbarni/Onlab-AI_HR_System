@@ -6,12 +6,12 @@ from database_manager import(
     get_all_employees, get_all_form_templates, get_all_groups, 
     add_form_assignments, get_forms_by_campaign, create_form_from_template
 )
+from utils.common import set_state
 
 def show_assign_group(campaign_id):
     """Show the view to assign a group to a campaign."""
 
     if st.button("← Back"):
-        st.session_state.campaigns_view = "campaign_forms"
         
         # Clear matrix state
         keys_to_delete = [
@@ -22,7 +22,7 @@ def show_assign_group(campaign_id):
         for k in keys_to_delete:
             if k in st.session_state:
                 del st.session_state[k]
-        st.rerun()
+        set_state(campaigns_view="campaign_forms")
 
     st.title("Assign Group to Form")
     
@@ -331,6 +331,5 @@ def show_assign_group(campaign_id):
                 add_form_assignments(send_form)
                 st.session_state.send_form = send_form
                 st.success(f"{len(st.session_state.send_form)} assignments prepared and saved to database.")
-                st.write(st.session_state.send_form)
         else:
             st.info("No employees selected.")
