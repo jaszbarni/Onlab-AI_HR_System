@@ -7,6 +7,8 @@ setup_page()
 # Removed check_user_initialized() so you can generate a link without being logged in!
 initialize_session_state("link_generator", "current_form_id")
 
+url = "http://localhost:8501"
+
 if st.session_state.link_generator:
     st.header("Generate Login Link")
     
@@ -14,14 +16,14 @@ if st.session_state.link_generator:
     all_employees = get_all_employees()
     
     if all_employees:
-        # Map display name (including role) to the employee ID to handle duplicates properly
-        employee_options = {f"{emp['first_name']} {emp['last_name']} - Role: {emp['role']} ({emp['email']})": emp["id"] for emp in all_employees}
+        # Map display name (including position) to the employee ID to handle duplicates properly
+        employee_options = {f"{emp['first_name']} {emp['last_name']} - Position: {emp['position']} ({emp['email']})": emp["id"] for emp in all_employees}
         selected_label = st.selectbox("Select user to generate a link for:", list(employee_options.keys()))
 
         if st.button("Generate Link", type="primary"):
             selected_id = employee_options[selected_label]
             token = generate_user_token(selected_id)
-            st.info(f"Your login link: http://localhost:8501/Forms/?token={token}")
+            st.info(f"Your login link: {url}/?token={token}")
     else:
         st.warning("No employees found in the database. Add them below.")
         

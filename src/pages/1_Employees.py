@@ -1,8 +1,8 @@
 import streamlit as st
 from database_manager import(
-    get_all_employees, update_employee_role, check_permission, delete_employee, 
+    get_all_employees, update_employee_position, check_permission, delete_employee, 
     add_group_to_employee, remove_group_from_employee, get_all_groups, add_group, delete_group,
-    get_all_roles, add_role, delete_role, update_role, get_all_roles_with_permissions
+    get_all_positions, add_position, delete_position, update_position, get_all_positions_with_permissions
 )
 from utils.common import delete_confirmation_dialog
 
@@ -47,7 +47,6 @@ def group_manager():
             if custom_group.strip():
                 add_group(custom_group.strip())
                 st.success(f"Group '{custom_group.strip()}' created!")
-                st.rerun()
             else:
                 st.error("Group name cannot be empty")
     
@@ -69,58 +68,56 @@ def group_manager():
     else:
         st.info("No groups created yet")
 
-@st.dialog("Manage Roles")
-def role_manager():
-    st.write("**Create a new role:**")
+@st.dialog("Manage Positions")
+def position_manager():
+    st.write("**Create a new position:**")
     col1, col2 = st.columns([3, 1])
     with col1:
-        custom_role = st.text_input(
-            "New role name",
-            key="new_role_input",
+        custom_position = st.text_input(
+            "New position name",
+            key="new_position_input",
             label_visibility="collapsed",
-            placeholder="Enter new role name"
+            placeholder="Enter new position name"
         )
     with col2:
-        if st.button("Create", key="create_role_btn", use_container_width=True, disabled=not check_permission("create")):
-            if custom_role.strip():
-                add_role(custom_role.strip(), [])
-                st.success(f"Role '{custom_role.strip()}' created!")
-                st.rerun()
+        if st.button("Create", key="create_position_btn", use_container_width=True, disabled=not check_permission("create")):
+            if custom_position.strip():
+                add_position(custom_position.strip(), [])
+                st.success(f"Position '{custom_position.strip()}' created!")
             else:
-                st.error("Role name cannot be empty")
+                st.error("Position name cannot be empty")
     
     st.divider()
     
-    st.write("**All Roles:**")
-    all_roles = get_all_roles_with_permissions()
+    st.write("**All Positions:**")
+    all_positions = get_all_positions_with_permissions()
     
     available_permissions = ["create", "read", "update", "delete"]
     
-    if all_roles:
-        for role_data in all_roles:
-            role = role_data["name"]
-            permissions = role_data["permissions"]
+    if all_positions:
+        for position_data in all_positions:
+            position = position_data["name"]
+            permissions = position_data["permissions"]
             
-            with st.expander(f"Role: {role}"):
+            with st.expander(f"Position: {position}"):
                 st.write("**Permissions:**")
                 cols = st.columns(len(available_permissions))
                 new_permissions = []
                 for i, perm in enumerate(available_permissions):
                     with cols[i]:
-                        if st.checkbox(perm.capitalize(), value=(perm in permissions), key=f"chk_{role}_{perm}"):
+                        if st.checkbox(perm.capitalize(), value=(perm in permissions), key=f"chk_{position}_{perm}"):
                             new_permissions.append(perm)
                 
                 if set(new_permissions) != set(permissions):
-                    update_role(role, new_permissions)
-                    st.rerun()
+                    update_position(position, new_permissions)
                 
                 st.divider()
-                if st.button("Delete Role", key=f"delete_role_{role}", type="primary", use_container_width=True, disabled=not check_permission("delete")):
-                    delete_role(role)
-                    st.success(f"Role '{role}' deleted!")
+                if st.button("Delete Position", key=f"delete_position_{position}", type="primary", use_container_width=True, disabled=not check_permission("delete")):
+                    delete_position(position)
+                    st.success(f"Position '{position}' deleted!")
                     st.rerun()
     else:
-        st.info("No roles defined")
+        st.info("No positions defined")
 
 
 
@@ -168,14 +165,13 @@ def edit_groups_dialog(employee_id, employee_name, current_groups):
         st.info("No groups available")
 
 
-
 if check_permission("update"):
     col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
         st.header("Employees")
     with col2:
-        if st.button("Manage Roles", type="secondary", use_container_width=True, disabled=not check_permission("create")):
-            role_manager()
+        if st.button("Manage Positions", type="secondary", use_container_width=True, disabled=not check_permission("create")):
+            position_manager()
             
     with col3:
         if st.button("Manage Groups", type="secondary", use_container_width=True, disabled=not check_permission("create")):
@@ -185,7 +181,7 @@ st.divider()
 
 employees = get_all_employees()
 
-col1, col2, col3, col4, col5, col6 = st.columns(6)
+col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([0.5, 1, 2, 2, 1.5, 1, 1, 2])
 with col1:
     st.caption("**ID**", text_alignment="left")
 with col2:
@@ -195,14 +191,18 @@ with col3:
 with col4:
     st.caption("**Groups**", text_alignment="left")
 with col5:
-    st.caption("**Role**", text_alignment="center")
+    st.caption("**Position**", text_alignment="center")
+with col6:
+    st.caption("**Created At**", text_alignment="center")
+with col7:
+    st.caption("**Position Acquired**", text_alignment="center")
 if check_permission("update"):
-    with col6:
+    with col8:
         st.caption("**Actions**", text_alignment="center")
 
 if employees:
     for employee in employees:
-        col1, col2, col3, col4, col5, col6 = st.columns(6, vertical_alignment="center")
+        col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([0.5, 1, 2, 2, 1.5, 1, 1, 2], vertical_alignment="center")
         with col1:
             st.write(f"{employee['id']}")
         with col2:
@@ -221,39 +221,44 @@ if employees:
             if check_permission("update"):
                 disabled = False
 
-            role_options = get_all_roles()
+            position_options = get_all_positions()
             
-            # If the employee has a role but it's not in the DB's roles table, add it so the selectbox doesn't wipe it
-            if employee['role'] and employee['role'] not in role_options:
-                role_options.insert(0, employee['role'])
+            # If the employee has a position but it's not in the DB's positions table, add it so the selectbox doesn't wipe it
+            if employee['position'] and employee['position'] not in position_options:
+                position_options.insert(0, employee['position'])
                 
-            current_role_index = 0
-            if employee['role'] in role_options:
-                current_role_index = role_options.index(employee['role'])
+            current_position_index = 0
+            if employee['position'] in position_options:
+                current_position_index = position_options.index(employee['position'])
             
-            new_role = st.selectbox(
-                "Role",
-                options=role_options,
-                index=current_role_index if role_options else None,
-                key=f"role_{employee['id']}",
+            new_position = st.selectbox(
+                "Position",
+                options=position_options,
+                index=current_position_index if position_options else None,
+                key=f"position_{employee['id']}",
                 label_visibility="collapsed",
-                disabled=disabled or not role_options
+                disabled=disabled or not position_options
             )
-            # Ensure we only update if a valid new role was selected (not None from an empty list)
-            if new_role is not None and new_role != employee['role']:
-                update_employee_role(employee['id'], new_role)
+            # Ensure we only update if a valid new position was selected (not None from an empty list)
+            if new_position is not None and new_position != employee['position']:
+                update_employee_position(employee['id'], new_position)
                 st.rerun()
         with col6:
+            created = employee.get('created_date')
+            st.write(created.split()[0] if created else "N/A")
+        with col7:
+            position_created = employee.get('position_acquired_date')
+            st.write(position_created.split()[0] if position_created else "N/A")
+        with col8:
             col_edit, col_delete = st.columns(2)
-            #if check_permission("update"):
             if check_permission("update"):
                 with col_edit:
                     if st.button(label="Edit groups", key=f"edit_{employee['id']}", disabled=not check_permission("update")):
                         edit_groups_dialog(employee['id'], f"{employee['first_name']} {employee['last_name']}", employee['groups'])
-                #if check_permission("delete"):
-                with col_delete:
-                    if st.button(label="❌", key=f"delete_{employee['id']}", disabled=not check_permission("delete")):
-                        delete_confirmation_dialog("employee", delete_employee, employee['id'])
+                if check_permission("delete"):
+                    with col_delete:
+                        if st.button(label="❌", key=f"delete_{employee['id']}", disabled=not check_permission("delete")):
+                            delete_confirmation_dialog("employee", delete_employee, employee['id'])
     
 else:
     st.info("No employees found.")

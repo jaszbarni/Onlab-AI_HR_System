@@ -3,7 +3,7 @@ from database_manager import add_employee, delete_all_forms, get_user_by_token, 
 from classes.user_class import User
 
 
-#TODO login, session state mutato kiszedese, assign mátrix json 
+#TODO login
 
 st.set_page_config(layout="wide", initial_sidebar_state="expanded")
 
@@ -35,10 +35,9 @@ if "token" in st.query_params:
     else:
         st.error("Invalid or expired login link.")
         st.stop()
-
+        
 #st.button("Delete all employees", on_click=delete_all_employees)
 
-# Configure sidebar navigation dynamically based on role
 pages = []
 
 if "user" not in st.session_state:
@@ -63,7 +62,7 @@ if "user" in st.session_state:
     with st.sidebar:
         st.header("User Data")
         st.write(f"Name: {st.session_state.user.first_name} {st.session_state.user.last_name}")
-        st.write(f"Role: {st.session_state.user.role}")
+        st.write(f"Position: {st.session_state.user.position}")
         
         if st.button("Logout"):
             del st.session_state.user

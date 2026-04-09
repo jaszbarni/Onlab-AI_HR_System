@@ -5,50 +5,49 @@ import streamlit as st
 from database_manager import check_permission, get_all_employees, get_evaluations_for_employee, get_ai_review, save_ai_review
 from dotenv import load_dotenv, find_dotenv
 from utils.common import set_state
+import datetime
 
 def employee_list_view():
-    st.title("AI reviews")
+    with st.spinner("Loading..."):
+        st.title("AI reviews")
 
-    all_employees = get_all_employees()
+        all_employees = get_all_employees()
 
-    col1, col2 = st.columns([0.8, 0.2])
-    with col1:
-        st.header("Employee List", text_alignment="left")
-        
-    st.divider()
-
-    if all_employees:
-        col1, col2, col3, col4 = st.columns([1, 3, 3, 2])
+        col1, col2 = st.columns([0.8, 0.2])
         with col1:
-            st.caption("**ID**", text_alignment="left")
-        with col2:
-            st.caption("**Name**", text_alignment="left")
-        with col3:
-            st.caption("**Email**", text_alignment="left")
-        with col4:
-            st.caption("**Actions**", text_alignment="center")
+            st.header("Employee List", text_alignment="left")
+            
+        st.divider()
 
-        for employee in all_employees:
-            col1, col2, col3, col4 = st.columns([1, 3, 3, 2], vertical_alignment="center")
+        if all_employees:
+            col1, col2, col3, col4 = st.columns([1, 3, 3, 2])
             with col1:
-                st.write(f"{employee['id']}")
+                st.caption("**ID**", text_alignment="left")
             with col2:
-                st.write(f"**{employee['first_name']} {employee['last_name']}**")
+                st.caption("**Name**", text_alignment="left")
             with col3:
-                st.write(employee['email'])
+                st.caption("**Email**", text_alignment="left")
             with col4:
-                if st.button("Get Review", key=f"review_{employee['id']}", use_container_width=True, disabled=not check_permission("create")):
-                    set_state(review_view="review", current_employee_id=employee['id'])
-    else:
-        st.info("No employees found.")
+                st.caption("**Actions**", text_alignment="center")
+
+            for employee in all_employees:
+                col1, col2, col3, col4 = st.columns([1, 3, 3, 2], vertical_alignment="center")
+                with col1:
+                    st.write(f"{employee['id']}")
+                with col2:
+                    st.write(f"**{employee['first_name']} {employee['last_name']}**")
+                with col3:
+                    st.write(employee['email'])
+                with col4:
+                    if st.button("Get Review", key=f"review_{employee['id']}", use_container_width=True, disabled=not check_permission("create")):
+                        set_state(review_view="review", current_employee_id=employee['id'])
+        else:
+            st.info("No employees found.")
 
 def review_view():
 
     if st.button("← Back to employee list"):
         set_state(review_view="list", current_employee_id=None)
-    with st.sidebar:
-        if st.button("← Back to employee list", use_container_width=True):
-            set_state(review_view="list", current_employee_id=None)
 
     employee_id = st.session_state.current_employee_id
     if not employee_id:
@@ -65,7 +64,7 @@ def review_view():
     st.title(f"AI review for {employee['first_name']} {employee['last_name']}")
 
     evals = get_evaluations_for_employee(employee_id)
-    eval_date = evals[0]['submitted_date'] if evals else "Nincs adat"
+    eval_date = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S") if evals else "Nincs adat"
     groups_str = ", ".join(employee.get("groups", [])) if employee.get("groups") else "Nincs"
     
     # Check if we already have a generated review that is up to date
@@ -75,14 +74,15 @@ def review_view():
     saved_review = get_ai_review(employee_id)
     
     if saved_review and saved_review[1] == evals_hash:
+        eval_date = saved_review[3] if len(saved_review) > 3 and saved_review[3] else eval_date
         st.markdown(
                 f"### Név: **{employee['first_name']} {employee['last_name']}**\n" +
-                f"### Pozíció: **{employee['role']}**\n" + 
-                f"### Osztály: **{groups_str}**\n" + 
+                f"### Pozíció: **{employee['position']}**\n" + 
+                f"### Munkakör(ök): **{groups_str}**\n" + 
                 f"### Értékelés dátuma: **{eval_date}**\n\n" + 
                 saved_review[0]
             )
-        st.info(f"Betöltve a gyorsítótárból (Generálva: {saved_review[2]})")
+        st.info(f"Betöltve a gyorsítótárból")
         
         if not st.button("Regenerate Review"):
             return
@@ -107,13 +107,12 @@ def review_view():
 
             llm = ChatOpenAI(
                 #model="nvidia/nemotron-3-super-120b-a12b:free",
-                model="qwen/qwen3.6-plus:free",
+                #model="qwen/qwen3.6-plus:free",
                 #model="qwen/qwen3.6-plus:free",
                 #model="qwen/qwen3-next-80b-a3b-instruct:free",
                 #model="meta-llama/llama-3.2-3b-instruct:free",
                 #model="meta-llama/llama-3.3-70b-instruct:free",
-                #model="google/gemini-2.0-flash-lite-preview-02-05:free", 
-                #model="openai/gpt-oss-20b:free",
+                model="openai/gpt-oss-20b:free",
                 api_key=api_key,
                 base_url="https://openrouter.ai/api/v1",
                 max_retries=5, # Automatically retry on 429 rate limit errors
@@ -150,16 +149,17 @@ def review_view():
             )
             
             review_text = response["messages"][-1].content
-            save_ai_review(employee_id, review_text, evals_hash)
+            review_date = save_ai_review(employee_id, review_text, evals_hash, eval_date)
             
             st.markdown(
                 f"### Név: **{employee['first_name']} {employee['last_name']}**\n" +
-                f"### Pozíció: **{employee['role']}**\n" + 
-                f"### Osztály: **{groups_str}**\n" + 
+                f"### Pozíció: **{employee['position']}**\n" + 
+                f"### Munkakör(ök): **{groups_str}**\n" + 
                 f"### Értékelés dátuma: **{eval_date}**\n" + 
                 "---\n\n" +
                 review_text
             )
+            st.success(f"Értékelés sikeresen generálva: {review_date}")
                 
         except Exception as e:
             st.error(f"Failed to generate review: {e}")

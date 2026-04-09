@@ -28,40 +28,40 @@ def db_connection():
 DB_PATH = os.environ.get("DATABASE_PATH", "data.db")
 
 # --- User Management & Permissions ---
-# Role definíciók és a hozzájuk tartozó jogosultságok (CRUD)
-ROLES = {
+# Position definíciók és a hozzájuk tartozó jogosultságok (CRUD)
+POSITIONS = {
     "Vezető": ["create", "read", "update", "delete"],
     "Manager": ["create", "read", "update"],
     "Back office": ["read"],
     "Fizikai": []
 }
 
-def get_all_roles():
-    """Get all available roles from the database."""
+def get_all_positions():
+    """Get all available positions from the database."""
     with db_connection() as cursor:
-        cursor.execute('SELECT name FROM roles ORDER BY name')
-        roles = [r[0] for r in cursor.fetchall()]
-        return roles
+        cursor.execute('SELECT name FROM positions ORDER BY name')
+        positions = [r[0] for r in cursor.fetchall()]
+        return positions
 
-def get_all_roles_with_permissions():
-    """Get all available roles and their permissions from the database."""
+def get_all_positions_with_permissions():
+    """Get all available positions and their permissions from the database."""
     with db_connection() as cursor:
-        cursor.execute('SELECT name, permissions FROM roles ORDER BY name')
-        roles = []
+        cursor.execute('SELECT name, permissions FROM positions ORDER BY name')
+        positions = []
         for row in cursor.fetchall():
             permissions = row[1].split(',') if row[1] else []
             permissions = [p.strip() for p in permissions if p.strip()]
-            roles.append({"name": row[0], "permissions": permissions})
-        return roles
+            positions.append({"name": row[0], "permissions": permissions})
+        return positions
 
 def check_permission(permission):
     if "user" not in st.session_state:
         return False
-    user_role = st.session_state.user.role
-    if not user_role:
+    user_position = st.session_state.user.position
+    if not user_position:
         return False
     with db_connection() as cursor:
-        cursor.execute('SELECT permissions FROM roles WHERE name = ?', (user_role,))
+        cursor.execute('SELECT permissions FROM positions WHERE name = ?', (user_position,))
         result = cursor.fetchone()
         if result:
             permissions = result[0].split(',') if result[0] else []
@@ -84,17 +84,20 @@ def init_db():
                     first_name TEXT NOT NULL,
                     last_name TEXT NOT NULL,
                     email TEXT NOT NULL,
-                    role TEXT,
-                    login_token TEXT UNIQUE)""")
+                    position TEXT,
+                    login_token TEXT UNIQUE,
+                    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    position_acquired_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
         # Create groups table
         cursor.execute("""CREATE TABLE IF NOT EXISTS groups (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL UNIQUE)""")
-        # Create roles table
-        cursor.execute("""CREATE TABLE IF NOT EXISTS roles (
+        # Create positions table
+        cursor.execute("""CREATE TABLE IF NOT EXISTS positions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL UNIQUE,
-                    permissions TEXT)""")
+                    permissions TEXT,
+                    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
         # Create employee_groups junction table for many-to-many relationship
         cursor.execute("""CREATE TABLE IF NOT EXISTS employee_groups (
                     employee_id INTEGER NOT NULL,
@@ -118,7 +121,7 @@ def init_db():
                     campaign_id INTEGER,
                     created_by TEXT NOT NULL,
                     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    is_template BOOLEAN NOT NULL DEFAULT TRUE,
+                    is_template BOOLEAN NOT NULL DEFAULT 1,
                     FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE)""")
         # Create questions table
         cursor.execute("""CREATE TABLE IF NOT EXISTS questions (
@@ -163,6 +166,7 @@ def init_db():
             employee_id INTEGER PRIMARY KEY,
             review_text TEXT NOT NULL,
             eval_hash TEXT NOT NULL,
+            eval_date TEXT,
             generated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
         )""")
@@ -171,17 +175,26 @@ def migrate_db():
     """Apply database migrations."""
     try:
         with db_connection() as cursor:
-            # Check if roles table is empty, if so, populate it
-            cursor.execute("SELECT COUNT(*) FROM roles")
+            # Migration: Rename 'roles' table to 'positions'
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='roles'")
+            if cursor.fetchone():
+                try:
+                    cursor.execute("ALTER TABLE roles RENAME TO positions")
+                except sqlite3.OperationalError:
+                    # RENAME not supported, skip (or handle complex migration)
+                    pass
+
+            # Check if positions table is empty, if so, populate it
+            cursor.execute("SELECT COUNT(*) FROM positions")
             if cursor.fetchone()[0] == 0:
-                ROLES = {
+                POSITIONS = {
                     "Vezető": ["create", "read", "update", "delete"],
                     "Manager": ["create", "read", "update"],
                     "Back office": ["read"],
                     "Fizikai": []
                 }
-                for role, permissions in ROLES.items():
-                    cursor.execute("INSERT INTO roles (name, permissions) VALUES (?, ?)", (role, ",".join(permissions)))
+                for position, permissions in POSITIONS.items():
+                    cursor.execute("INSERT INTO positions (name, permissions) VALUES (?, ?)", (position, ",".join(permissions)))
 
             # Check if campaign_id column exists in forms table
             cursor.execute("PRAGMA table_info(forms)")
@@ -211,13 +224,13 @@ def migrate_db():
             cursor.execute("PRAGMA table_info(forms)")
             columns = [column[1] for column in cursor.fetchall()]
             if "is_template" not in columns:
-                cursor.execute("ALTER TABLE forms ADD COLUMN is_template BOOLEAN NOT NULL DEFAULT TRUE")
+                cursor.execute("ALTER TABLE forms ADD COLUMN is_template BOOLEAN NOT NULL DEFAULT 1")
 
             # Ensure a Self-evaluation template always exists
             cursor.execute("SELECT COUNT(*) FROM forms WHERE name = 'Self-evaluation' AND is_template = 1")
             if cursor.fetchone()[0] == 0:
                 cursor.execute("INSERT INTO forms (name, description, created_by, is_template) VALUES (?, ?, ?, ?)",
-                               ('Self-evaluation', 'Default template for self-evaluations', 'System', True))
+                               ('Self-evaluation', 'Default template for self-evaluations', 'System', 1))
                                
             # Check if question_description column exists in questions table
             cursor.execute("PRAGMA table_info(questions)")
@@ -231,6 +244,27 @@ def migrate_db():
             if "login_token" not in columns:
                 cursor.execute("ALTER TABLE employees ADD COLUMN login_token TEXT")
                 cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_login_token ON employees(login_token)")
+            
+            # Migration: Rename 'role' column to 'position'
+            if "role" in columns and "position" not in columns:
+                cursor.execute("ALTER TABLE employees RENAME COLUMN role TO position")
+            
+            # Migration: Rename 'role_acquired_date' column to 'position_acquired_date'
+            if "role_acquired_date" in columns and "position_acquired_date" not in columns:
+                cursor.execute("ALTER TABLE employees RENAME COLUMN role_acquired_date TO position_acquired_date")
+
+            if "created_date" not in columns:
+                cursor.execute("ALTER TABLE employees ADD COLUMN created_date TIMESTAMP")
+                
+            if "position_acquired_date" not in columns:
+                cursor.execute("ALTER TABLE employees ADD COLUMN position_acquired_date TIMESTAMP")
+                cursor.execute("UPDATE employees SET position_acquired_date = created_date WHERE position_acquired_date IS NULL")
+                
+            # Check if created_date column exists in positions table
+            cursor.execute("PRAGMA table_info(positions)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if "created_date" not in columns:
+                cursor.execute("ALTER TABLE positions ADD COLUMN created_date TIMESTAMP")
 
             # Check if ai_reviews table exists
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ai_reviews'")
@@ -239,8 +273,15 @@ def migrate_db():
                     employee_id INTEGER PRIMARY KEY,
                     review_text TEXT NOT NULL,
                     eval_hash TEXT NOT NULL,
+                eval_date TEXT,
                     generated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE)""")
+                
+            # Check if eval_date column exists in ai_reviews table
+            cursor.execute("PRAGMA table_info(ai_reviews)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if "eval_date" not in columns:
+                cursor.execute("ALTER TABLE ai_reviews ADD COLUMN eval_date TEXT")
 
     except Exception as e:
         # If migration fails, log the error
@@ -251,12 +292,12 @@ migrate_db()
 
 def add_employee(user: User):
     with db_connection() as cursor:
-        cursor.execute('INSERT INTO employees (first_name, last_name, email, role) VALUES (?, ?, ?, ?)',
+        cursor.execute('INSERT INTO employees (first_name, last_name, email, position) VALUES (?, ?, ?, ?)',
                        (
                            user.first_name,
                            user.last_name,
                            user.email,
-                           user.role
+                           user.position
                        ))
         employee_id = cursor.lastrowid
         
@@ -271,7 +312,7 @@ def add_employee(user: User):
 def get_all_employees():
     with db_connection() as cursor:
         cursor.execute('''
-            SELECT e.id, e.first_name, e.last_name, e.email, e.role, GROUP_CONCAT(g.name)
+            SELECT e.id, e.first_name, e.last_name, e.email, e.position, GROUP_CONCAT(g.name), e.created_date, e.position_acquired_date
             FROM employees e
             LEFT JOIN employee_groups eg ON e.id = eg.employee_id
             LEFT JOIN groups g ON eg.group_id = g.id
@@ -287,8 +328,10 @@ def get_all_employees():
                 "first_name": row[1],
                 "last_name": row[2],
                 "email": row[3],
-                "role": row[4],
-                "groups": groups
+                "position": row[4],
+                "groups": groups,
+                "created_date": row[6],
+                "position_acquired_date": row[7]
             })
         
         return employees
@@ -296,7 +339,7 @@ def get_all_employees():
 def get_user_by_token(token):
     """Retrieve a user by their login token."""
     with db_connection() as cursor:
-        cursor.execute('SELECT first_name, last_name, email, role FROM employees WHERE login_token = ?', (token,))
+        cursor.execute('SELECT first_name, last_name, email, position FROM employees WHERE login_token = ?', (token,))
         row = cursor.fetchone()
         if row:
             return User.User(row[0], row[1], row[2], row[3])
@@ -352,25 +395,25 @@ def delete_group(group_name):
         cursor.execute('DELETE FROM groups WHERE name = ?', (group_name,))
 
 
-def add_role(role_name, permissions):
-    """Add a new role to the database."""
+def add_position(position_name, permissions):
+    """Add a new position to the database."""
     with db_connection() as cursor:
-        cursor.execute('INSERT INTO roles (name, permissions) VALUES (?, ?)', (role_name, ",".join(permissions)))
+        cursor.execute('INSERT INTO positions (name, permissions) VALUES (?, ?)', (position_name, ",".join(permissions)))
 
-def delete_role(role_name):
-    """Delete a role from the database."""
+def delete_position(position_name):
+    """Delete a position from the database."""
     with db_connection() as cursor:
-        cursor.execute('DELETE FROM roles WHERE name = ?', (role_name,))
+        cursor.execute('DELETE FROM positions WHERE name = ?', (position_name,))
 
-def update_role(role_name, permissions):
-    """Update a role's permissions in the database."""
+def update_position(position_name, permissions):
+    """Update a position's permissions in the database."""
     with db_connection() as cursor:
-        cursor.execute('UPDATE roles SET permissions = ? WHERE name = ?', (",".join(permissions), role_name))
+        cursor.execute('UPDATE positions SET permissions = ? WHERE name = ?', (",".join(permissions), position_name))
         
-def update_employee_role(employee_id, new_role):
-    """Update an employee's role in the database."""
+def update_employee_position(employee_id, new_position):
+    """Update an employee's position in the database."""
     with db_connection() as cursor:
-        cursor.execute('UPDATE employees SET role = ? WHERE id = ?', (new_role, employee_id))
+        cursor.execute('UPDATE employees SET position = ?, position_acquired_date = CURRENT_TIMESTAMP WHERE id = ?', (new_position, employee_id))
 
 def delete_employee(employee_id):
     """Delete an employee from the database."""
@@ -747,12 +790,30 @@ def get_evaluations_for_employee(employee_id):
 def get_ai_review(employee_id):
     """Get the saved AI review for an employee."""
     with db_connection() as cursor:
-        cursor.execute('SELECT review_text, eval_hash, generated_date FROM ai_reviews WHERE employee_id = ?', (employee_id,))
+        cursor.execute('SELECT review_text, eval_hash, generated_date, eval_date FROM ai_reviews WHERE employee_id = ?', (employee_id,))
         return cursor.fetchone()
 
-def save_ai_review(employee_id, review_text, eval_hash):
+def save_ai_review(employee_id, review_text, eval_hash, eval_date):
     """Save or update an AI review for an employee."""
     with db_connection() as cursor:
-        cursor.execute('''INSERT OR REPLACE INTO ai_reviews (employee_id, review_text, eval_hash, generated_date) 
-                          VALUES (?, ?, ?, CURRENT_TIMESTAMP)''', 
-                       (employee_id, review_text, eval_hash))
+        cursor.execute('''INSERT OR REPLACE INTO ai_reviews (employee_id, review_text, eval_hash, eval_date, generated_date) 
+                          VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)''', 
+                       (employee_id, review_text, eval_hash, eval_date))
+        cursor.execute('SELECT generated_date FROM ai_reviews WHERE employee_id = ?', (employee_id,))
+        return cursor.fetchone()[0]
+
+def save_company_values(value):
+    """Save the single company value text to the database."""
+    with db_connection() as cursor:
+        cursor.execute('CREATE TABLE IF NOT EXISTS company_values (id INTEGER PRIMARY KEY, value TEXT)')
+        # Clear existing values to ensure only one record exists
+        cursor.execute('DELETE FROM company_values')
+        cursor.execute('INSERT INTO company_values (id, value) VALUES (1, ?)', (value,))
+
+def get_company_values():
+    """Get the single company value text from the database."""
+    with db_connection() as cursor:
+        cursor.execute('CREATE TABLE IF NOT EXISTS company_values (id INTEGER PRIMARY KEY, value TEXT)')
+        cursor.execute('SELECT value FROM company_values WHERE id = 1')
+        result = cursor.fetchone()
+        return result[0] if result else ""

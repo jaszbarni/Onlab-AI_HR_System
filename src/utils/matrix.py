@@ -200,25 +200,25 @@ def show_assign_group(campaign_id):
         selected_employees = [s for s in st.session_state.employee_selections if s]
         selected_employees = list(dict.fromkeys(selected_employees)) 
 
-        role_colors = {}
-        role_color_palette = [
+        position_colors = {}
+        position_color_palette = [
             "red", "orange", "blue", "green", "violet"
         ]
         next_color_index = 0
 
-        def get_role_color(role):
+        def get_position_color(position):
             nonlocal next_color_index
-            if role not in role_colors:
-                role_colors[role] = role_color_palette[next_color_index % len(role_color_palette)]
+            if position not in position_colors:
+                position_colors[position] = position_color_palette[next_color_index % len(position_color_palette)]
                 next_color_index += 1
-            return role_colors[role]
+            return position_colors[position]
 
-        def Get_employee_role(target_emp):
+        def Get_employee_position(target_emp):
             target_emp_data = next((emp for emp in all_employees if f"{emp['first_name']} {emp['last_name']}" == target_emp), None)
-            role = "Peer"
+            position = "Peer"
             if target_emp_data:
-                role = target_emp_data.get("role") or "Peer"
-            return role
+                position = target_emp_data.get("position") or "Peer"
+            return position
 
         if selected_employees:
             matrix_employees = list(selected_employees)
@@ -235,24 +235,24 @@ def show_assign_group(campaign_id):
             header_cols = st.columns(len(matrix_employees) + 1, gap="xsmall")
             header_cols[0].write("")
             for i, target_emp in enumerate(matrix_employees):
-                role = Get_employee_role(target_emp)
+                position = Get_employee_position(target_emp)
                 with header_cols[i+1]:
                     name_col1, name_col2 = st.columns(gap=None, spec=2)
                     with name_col1:
                         st.write(target_emp)
                     with name_col2:
-                        st.badge(f"{role}", color=get_role_color(role))
+                        st.badge(f"{position}", color=get_position_color(position))
 
             # Matrix rows
             for filler_emp in matrix_employees:
                 row_cols = st.columns(len(matrix_employees) + 1, gap="xsmall")
-                role = Get_employee_role(filler_emp)
+                position = Get_employee_position(filler_emp)
                 with row_cols[0]:
                     name_col1, name_col2 = st.columns(gap=None, spec=2)
                     with name_col1:
                         st.write(filler_emp)
                     with name_col2:
-                        st.badge(f"{role}", color=get_role_color(role))
+                        st.badge(f"{position}", color=get_position_color(position))
                 
                 for i, target_emp in enumerate(matrix_employees):
                     with row_cols[i+1]:
@@ -269,18 +269,18 @@ def show_assign_group(campaign_id):
                             with in_row_col2:
                                 if filler_emp == target_emp:
                                     st.badge("Self-evaluation", color="grey")
-                                    target_role = "Self-evaluation"
+                                    target_position = "Self-evaluation"
                                 else:   
                                     cell_form_templates = list(base_form_templates)
-                                    target_role = Get_employee_role(target_emp)
+                                    target_position = Get_employee_position(target_emp)
                                 
                                     # Exclude self evaluation templates from peer evaluation options
                                     cell_form_templates = [ft for ft in cell_form_templates if "self" not in ft["name"].lower()]
                                     
                                     template_names = [ft["name"] for ft in cell_form_templates]
                                     
-                                    # Find the best match for the role among template names
-                                    best_match_name_list = difflib.get_close_matches(target_role, template_names, n=1, cutoff=0.1)
+                                    # Find the best match for the position among template names
+                                    best_match_name_list = difflib.get_close_matches(target_position, template_names, n=1, cutoff=0.1)
                                     
                                     if best_match_name_list:
                                         best_match_name = best_match_name_list[0]
@@ -318,7 +318,7 @@ def show_assign_group(campaign_id):
                                 form_id_to_assign = self_eval_template["id"] if self_eval_template else None
                             else:
                                 selected_template = st.session_state.get(f"form_type_{filler_emp}_{target_emp}")
-                                form_type = selected_template["name"] if selected_template else Get_employee_role(target_emp)
+                                form_type = selected_template["name"] if selected_template else Get_employee_position(target_emp)
                                 form_id_to_assign = selected_template["id"] if selected_template else None
                             
                             send_form.append({

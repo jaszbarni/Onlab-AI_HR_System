@@ -37,11 +37,11 @@ def render_question_input(question_id, question_text, question_description, ques
     elif question_type == "0-5 Rating":
         col1, col2 = st.columns(2)
         with col1:
-            answer = st.slider("", min_value=0, max_value=5, value=st.session_state[key], key=key)
+            answer = st.slider("", min_value=0, max_value=5, key=key)
     elif question_type == "1-10 Rating":
         col1, col2 = st.columns(2)
         with col1:
-            answer = st.slider("", min_value=1, max_value=10, value=st.session_state[key], key=key)
+            answer = st.slider("", min_value=1, max_value=10, key=key)
     elif question_type == "Multiple Choice":
         answer = st.text_input("Enter your choice:", key=key)
     else:
@@ -57,7 +57,7 @@ def show_list_view(view_key, form_id_key):
         view_key: Session state key for current view
         form_id_key: Session state key for current form ID
     """
-    st.button("delete all assignments", on_click=delete_all_assignments)
+    #st.button("delete all assignments", on_click=delete_all_assignments)
 
     st.header("Forms", text_alignment="left")
     st.divider()
