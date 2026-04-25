@@ -1,10 +1,11 @@
 import streamlit as st
+from classes.user_class import User
 from database_manager import(
-    get_all_employees, update_employee_position, check_permission, delete_employee, 
+    add_employee, get_all_employees, update_employee_position, check_permission, delete_employee, 
     add_group_to_employee, remove_group_from_employee, get_all_groups, add_group, delete_group,
     get_all_positions, add_position, delete_position, update_position, get_all_positions_with_permissions
 )
-from utils.common import delete_confirmation_dialog
+from utils.common import check_email_format, delete_confirmation_dialog
 
 st.set_page_config(layout="wide", initial_sidebar_state="expanded")
 
@@ -28,6 +29,40 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+@st.dialog("Add employee")
+def add_employee_dialog():
+    first_name = st.text_input(
+        "First name",
+        label_visibility="collapsed",
+        placeholder="Enter first name"
+    )
+    last_name = st.text_input(
+        "Last name",
+        label_visibility="collapsed",
+        placeholder="Enter last name"
+    )
+    email = st.text_input(
+        "Email",
+        label_visibility="collapsed",
+        placeholder="Enter email"
+    )
+
+    if st.button("Save"):
+        if(not check_email_format(email)):
+            st.error("Invalid email format")  
+        elif first_name.strip() and last_name.strip() and email.strip():
+            new_user = User(
+                first_name.strip(),
+                last_name.strip(),
+                email.strip(),
+                "None"
+            )
+            add_employee(new_user)
+            st.success("Employee added!")
+            st.rerun()
+        else:
+            st.error("Please fill in all fields.")
+
 
 # Dialog for managing all groups
 @st.dialog("Manage Groups")
@@ -47,6 +82,7 @@ def group_manager():
             if custom_group.strip():
                 add_group(custom_group.strip())
                 st.success(f"Group '{custom_group.strip()}' created!")
+                st.rerun()
             else:
                 st.error("Group name cannot be empty")
     
@@ -84,6 +120,7 @@ def position_manager():
             if custom_position.strip():
                 add_position(custom_position.strip(), [])
                 st.success(f"Position '{custom_position.strip()}' created!")
+                st.rerun()
             else:
                 st.error("Position name cannot be empty")
     
@@ -166,16 +203,18 @@ def edit_groups_dialog(employee_id, employee_name, current_groups):
 
 
 if check_permission("update"):
-    col1, col2, col3 = st.columns([3, 1, 1])
+    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
     with col1:
         st.header("Employees")
     with col2:
         if st.button("Manage Positions", type="secondary", use_container_width=True, disabled=not check_permission("create")):
             position_manager()
-            
     with col3:
         if st.button("Manage Groups", type="secondary", use_container_width=True, disabled=not check_permission("create")):
             group_manager()
+    with col4:
+        if st.button("Add employee", type="secondary", use_container_width=True, disabled=not check_permission("create")):
+            add_employee_dialog()
 
 st.divider()
 
@@ -221,7 +260,7 @@ if employees:
             if check_permission("update"):
                 disabled = False
 
-            position_options = get_all_positions()
+            position_options = get_all_positions() + ["None"]
             
             # If the employee has a position but it's not in the DB's positions table, add it so the selectbox doesn't wipe it
             if employee['position'] and employee['position'] not in position_options:
@@ -247,8 +286,8 @@ if employees:
             created = employee.get('created_date')
             st.write(created.split()[0] if created else "N/A")
         with col7:
-            position_created = employee.get('position_acquired_date')
-            st.write(position_created.split()[0] if position_created else "N/A")
+            position_acquired = employee.get('position_acquired_date')
+            st.write(position_acquired.split()[0] if position_acquired else "N/A")
         with col8:
             col_edit, col_delete = st.columns(2)
             if check_permission("update"):

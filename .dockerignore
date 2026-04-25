@@ -7,3 +7,5 @@
 
 # Ignore database files from the build context
 src/data.db
+
+.streamlit/secrets.toml

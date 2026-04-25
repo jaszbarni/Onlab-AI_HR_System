@@ -1,11 +1,18 @@
 import os
 import json
 import hashlib
+import webbrowser
 import streamlit as st
 from database_manager import check_permission, get_all_employees, get_evaluations_for_employee, get_ai_review, save_ai_review
 from dotenv import load_dotenv, find_dotenv
 from utils.common import set_state
 import datetime
+from langchain_openai import ChatOpenAI
+from langchain_core.tools import tool
+from langchain.agents import create_agent
+import phoenix as px
+from phoenix.otel import register
+from openinference.instrumentation.langchain import LangChainInstrumentor
 
 def employee_list_view():
     with st.spinner("Loading..."):
@@ -77,7 +84,7 @@ def review_view():
         eval_date = saved_review[3] if len(saved_review) > 3 and saved_review[3] else eval_date
         st.markdown(
                 f"### Név: **{employee['first_name']} {employee['last_name']}**\n" +
-                f"### Pozíció: **{employee['position']}**\n" + 
+                f"### Pozíció: **{employee['position']}** ({employee['position_acquired_date'].split()[0]} óta)\n" + 
                 f"### Munkakör(ök): **{groups_str}**\n" + 
                 f"### Értékelés dátuma: **{eval_date}**\n\n" + 
                 saved_review[0]
@@ -90,9 +97,12 @@ def review_view():
     
     with st.spinner("Generating AI review..."):
         try:
-            from langchain_openai import ChatOpenAI
-            from langchain_core.tools import tool
-            from langchain.agents import create_agent
+            # Start the local Phoenix app and automatically instrument LangChain
+            px.launch_app()
+            session = register(project_name="Onlab", auto_instrument=True)
+            LangChainInstrumentor().instrument(tracer_provider=session)
+
+            webbrowser.open(session.url)
 
             #setup AI
             load_dotenv(find_dotenv())
@@ -106,13 +116,12 @@ def review_view():
                 return
 
             llm = ChatOpenAI(
-                #model="nvidia/nemotron-3-super-120b-a12b:free",
-                #model="qwen/qwen3.6-plus:free",
-                #model="qwen/qwen3.6-plus:free",
-                #model="qwen/qwen3-next-80b-a3b-instruct:free",
-                #model="meta-llama/llama-3.2-3b-instruct:free",
-                #model="meta-llama/llama-3.3-70b-instruct:free",
-                model="openai/gpt-oss-20b:free",
+                #model="nvidia/nemotron-3-super-120b-a12b:free", #2287 tk, 2m
+                #model="z-ai/glm-4.5-air:free", #5041 tk, 2m 25s
+                #model="openai/gpt-oss-120b:free", #5500 tk, 34 s
+                #model="openai/gpt-oss-20b:free", #350 tk 6s
+                model="arcee-ai/trinity-large-preview:free", #5500 tk, 1m 18s 
+
                 api_key=api_key,
                 base_url="https://openrouter.ai/api/v1",
                 max_retries=5, # Automatically retry on 429 rate limit errors
@@ -127,7 +136,7 @@ def review_view():
             def get_template() -> str:
                 """Get the text template that the AI review should follow."""
                 # Construct absolute path relative to this script's location
-                template_path = os.path.join(os.path.dirname(__file__), "AI_template.md")
+                template_path = os.path.join(os.path.dirname(__file__), "AI_review_template.md")
                 with open(template_path, mode="r", encoding="utf-8") as f:
                     return f.read()
 

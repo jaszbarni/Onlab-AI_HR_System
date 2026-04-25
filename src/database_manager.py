@@ -6,6 +6,7 @@ import functools
 from contextlib import contextmanager
 import uuid
 from datetime import datetime
+import bcrypt
 
 # Define the database path using an environment variable, with a fallback for local development
 DB_PATH = os.environ.get("DATABASE_PATH", "data.db")
@@ -55,11 +56,17 @@ def get_all_positions_with_permissions():
         return positions
 
 def check_permission(permission):
+    """Check if the current user has a specific permission."""
     if "user" not in st.session_state:
         return False
-    user_position = st.session_state.user.position
+    
+    # Safely get user position with fallback
+    user = st.session_state.user
+    user_position = getattr(user, 'position', None)
+    
     if not user_position:
         return False
+    
     with db_connection() as cursor:
         cursor.execute('SELECT permissions FROM positions WHERE name = ?', (user_position,))
         result = cursor.fetchone()
@@ -259,6 +266,10 @@ def migrate_db():
             if "position_acquired_date" not in columns:
                 cursor.execute("ALTER TABLE employees ADD COLUMN position_acquired_date TIMESTAMP")
                 cursor.execute("UPDATE employees SET position_acquired_date = created_date WHERE position_acquired_date IS NULL")
+            
+            # Add password_hash column for password-based authentication
+            if "password_hash" not in columns:
+                cursor.execute("ALTER TABLE employees ADD COLUMN password_hash TEXT")
                 
             # Check if created_date column exists in positions table
             cursor.execute("PRAGMA table_info(positions)")
@@ -344,6 +355,23 @@ def get_user_by_token(token):
         if row:
             return User.User(row[0], row[1], row[2], row[3])
         return None
+    
+
+
+def get_user_by_email(email):
+    """Retrieve a user by their email address."""
+    with db_connection() as cursor:
+        cursor.execute('SELECT id, first_name, last_name, email, position FROM employees WHERE email = ?', (email.lower(),))
+        row = cursor.fetchone()
+        if row:
+            return {
+                "id": row[0],
+                "first_name": row[1],
+                "last_name": row[2],
+                "email": row[3],
+                "position": row[4]
+            }
+        return None
 
 def generate_user_token(employee_id):
     """Generate and save a new login token for an employee."""
@@ -351,6 +379,59 @@ def generate_user_token(employee_id):
     with db_connection() as cursor:
         cursor.execute('UPDATE employees SET login_token = ? WHERE id = ?', (token, employee_id))
     return token
+
+def hash_password(password: str) -> str:
+    """Hash a password using bcrypt (rounds=12)."""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
+
+def verify_password(password: str, password_hash: str) -> bool:
+    """Verify a password against its bcrypt hash."""
+    try:
+        return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+    except Exception:
+        return False
+
+def set_employee_password(employee_id: int, password: str) -> bool:
+    """Set or update password for an employee."""
+    try:
+        password_hash = hash_password(password)
+        with db_connection() as cursor:
+            cursor.execute('UPDATE employees SET password_hash = ? WHERE id = ?', (password_hash, employee_id))
+        return True
+    except Exception as e:
+        print(f"Error setting password: {e}")
+        return False
+
+def authenticate_employee(email: str, password: str):
+    """Authenticate an employee with email and password."""
+    email = email.lower()
+    with db_connection() as cursor:
+        cursor.execute(
+            'SELECT id, first_name, last_name, email, position, password_hash FROM employees WHERE email = ?',
+            (email,)
+        )
+        row = cursor.fetchone()
+        
+        if row and row[5]:  # Check if password_hash exists
+            if verify_password(password, row[5]):
+                return User.User(row[1], row[2], row[3], row[4])  # Return User object
+        
+    return None
+
+def is_employee_registered(email: str) -> bool:
+    """Check if an employee exists in the system."""
+    email = email.lower()
+    with db_connection() as cursor:
+        cursor.execute('SELECT id FROM employees WHERE email = ?', (email,))
+        return cursor.fetchone() is not None
+
+def has_employee_password(email: str) -> bool:
+    """Check if an employee has a password set (is already registered with password)."""
+    email = email.lower()
+    with db_connection() as cursor:
+        cursor.execute('SELECT password_hash FROM employees WHERE email = ?', (email,))
+        row = cursor.fetchone()
+        return row is not None and row[0] is not None
 
 def get_all_groups():
     """Get all available groups."""

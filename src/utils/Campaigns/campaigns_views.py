@@ -11,7 +11,7 @@ from utils.common import get_user_name, back_button, delete_confirmation_dialog,
 import pandas as pd
 import altair as alt
 
-from utils.test_campaigns import generate_test_campaign
+from utils.Campaigns.test_campaigns import generate_test_campaign
 
 
 def render_question_editor(question_id, question_text, question_description, question_type, min_val, max_val, form_id, is_closed=False):

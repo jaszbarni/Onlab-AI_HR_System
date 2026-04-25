@@ -3,9 +3,10 @@ import random
 import uuid
 import difflib
 from database_manager import(
-    get_all_employees, get_all_form_templates, get_all_groups, 
+    generate_user_token, get_all_employees, get_all_form_templates, get_all_groups, 
     add_form_assignments, get_forms_by_campaign, create_form_from_template
 )
+from utils.Campaigns.email_sender import email_sender
 from utils.common import set_state
 
 def show_assign_group(campaign_id):
@@ -311,6 +312,7 @@ def show_assign_group(campaign_id):
                         self_eval_template = {"id": new_form_id, "name": global_self_eval[1]}
 
                 for filler_emp in matrix_employees:
+                    has_assigned_targets = False
                     for target_emp in matrix_employees:
                         if st.session_state.get(f"cell_{filler_emp}_{target_emp}"):
                             if target_emp == filler_emp:
@@ -327,9 +329,16 @@ def show_assign_group(campaign_id):
                                 "form_type": form_type,
                                 "form_id": form_id_to_assign
                             })
+                            has_assigned_targets = True
+                            
+                    if has_assigned_targets:
+                        filler_emp_data = next((emp for emp in all_employees if f"{emp['first_name']} {emp['last_name']}" == filler_emp), None)
+                        if filler_emp_data:
+                            email_sender(filler_emp_data)
+                            st.success("Email sent to selected employee(s)!")
                 
                 add_form_assignments(send_form)
                 st.session_state.send_form = send_form
-                st.success(f"{len(st.session_state.send_form)} assignments prepared and saved to database.")
+                st.success(f"{len(st.session_state.send_form)} employee(s) assigned!")
         else:
             st.info("No employees selected.")

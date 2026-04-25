@@ -1,6 +1,6 @@
 import streamlit as st
 from utils.common import setup_page, check_user_initialized, initialize_session_state
-from utils.template_views import show_templates_list, show_edit_template
+from utils.Form_templates.template_views import show_templates_list, show_edit_template
 
 # Setup
 setup_page()

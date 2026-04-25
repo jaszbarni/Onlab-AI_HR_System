@@ -1,4 +1,6 @@
 """Common utilities and setup functions for all pages."""
+import re
+
 import streamlit as st
 
 
@@ -116,3 +118,7 @@ def delete_confirmation_dialog(item_name, delete_callback, *args):
         
     if col2.button("Cancel", use_container_width=True):
         st.rerun()
+
+def check_email_format(email):
+    pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+    return bool(re.match(pattern, email))

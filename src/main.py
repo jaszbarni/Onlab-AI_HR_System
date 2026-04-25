@@ -1,5 +1,5 @@
 import streamlit as st
-from database_manager import add_employee, delete_all_forms, get_user_by_token, generate_user_token, delete_all_employees, check_permission
+from database_manager import add_employee, delete_all_forms, get_user_by_token, generate_user_token, delete_all_employees, check_permission, has_employee_password, is_employee_registered
 from classes.user_class import User
 
 
@@ -14,11 +14,18 @@ except FileNotFoundError:
     st.error("CSS file not found. Please make sure 'form.css' is in the same folder.")
 
 # Hide the sidebar collapse/expand buttons to fix it open
+# Also hide the "Change Password" tab from the sidebar navigation
 st.markdown(
     """
     <style>
         [data-testid="collapsedControl"] {display: none;}
         [data-testid="stSidebarCollapseButton"] {display: none;}
+        [data-testid="stSidebarNavItems"] li:has(a[href$="change_password"]) {
+            display: none !important;
+        }
+        [data-testid="stSidebarNavItems"] a[href$="change_password"] {
+            display: none !important;
+        }
     </style>
     """,
     unsafe_allow_html=True,
@@ -41,11 +48,12 @@ if "token" in st.query_params:
 pages = []
 
 if "user" not in st.session_state:
-    pages.append(st.Page("pages/5_Generate_link.py", title="Generate link"))
-
-if "user" in st.session_state:
-    pages.insert(0, st.Page("pages/4_Forms.py", title="Forms"))
+    pages.append(st.Page("pages/0_Login.py", title="Login"))
     
+if "user" in st.session_state:
+    pages.append(st.Page("pages/7_change_password.py", title="Change Password", url_path="change_password"))
+    pages.insert(0, st.Page("pages/4_Forms.py", title="Forms"))
+
     # Management pages require 'read' permission (Back office, Manager, Vezető)
     if check_permission("read"):
         pages.insert(0, st.Page("pages/6_AI_review.py", title="AI Review"))
@@ -64,12 +72,22 @@ if "user" in st.session_state:
         st.write(f"Name: {st.session_state.user.first_name} {st.session_state.user.last_name}")
         st.write(f"Position: {st.session_state.user.position}")
         
-        if st.button("Logout"):
+        st.divider()
+        
+        if st.button("Change password", use_container_width=True):
+            st.switch_page("pages/7_change_password.py")
+
+        if st.button("Logout", type="primary"):
             del st.session_state.user
             st.rerun()
 
 
 st.title("HR System", text_alignment="center")
+if "user" in st.session_state:
+    if not has_employee_password(st.session_state.user.email):
+        st.error("Change the password now!")
+
+
 #st.button("Delete all forms", on_click=delete_all_forms())
 
 #st.json({k: str(v) for k, v in st.session_state.items()})
