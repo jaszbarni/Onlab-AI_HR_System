@@ -1,6 +1,7 @@
 import streamlit as st
-from database_manager import add_employee, delete_all_forms, get_user_by_token, generate_user_token, delete_all_employees, check_permission, has_employee_password, is_employee_registered
 from classes.user_class import User
+from Database.login import get_user_by_token, has_employee_password
+from Database.database_manager import check_permission
 
 
 #TODO login

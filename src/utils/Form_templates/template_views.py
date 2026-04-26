@@ -1,17 +1,12 @@
 """Views for form template management."""
-import json
-import os
-
 import streamlit as st
-from database_manager import (
-    check_permission, create_form, update_form, get_all_form_templates, delete_form,
-    add_question, update_question, delete_question,
-    get_company_values, save_company_values
-)
-from dotenv import load_dotenv, find_dotenv
+
 from classes.form_template_class import FormTemplate
 from utils.Form_templates.AI_form_maker import use_AI_questions
 from utils.common import get_user_name, delete_confirmation_dialog, set_state
+from Database.forms import delete_question, update_question, get_all_form_templates, delete_form, create_form, add_question, update_form
+from Database.database_manager import check_permission
+from Database.form_response import get_company_values, save_company_values
 
 
 def render_question_editor(question_id, question_text, question_description, question_type, min_val, max_val, form_id, is_closed=False):

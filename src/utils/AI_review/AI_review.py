@@ -3,7 +3,6 @@ import json
 import hashlib
 import webbrowser
 import streamlit as st
-from database_manager import check_permission, get_all_employees, get_evaluations_for_employee, get_ai_review, save_ai_review
 from dotenv import load_dotenv, find_dotenv
 from utils.common import set_state
 import datetime
@@ -13,6 +12,9 @@ from langchain.agents import create_agent
 import phoenix as px
 from phoenix.otel import register
 from openinference.instrumentation.langchain import LangChainInstrumentor
+from Database.employee import get_all_employees
+from Database.database_manager import check_permission
+from Database.form_response import get_evaluations_for_employee, get_ai_review, save_ai_review
 
 def employee_list_view():
     with st.spinner("Loading..."):
@@ -98,9 +100,9 @@ def review_view():
     with st.spinner("Generating AI review..."):
         try:
             # Start the local Phoenix app and automatically instrument LangChain
-            px.launch_app()
-            session = register(project_name="Onlab", auto_instrument=True)
-            LangChainInstrumentor().instrument(tracer_provider=session)
+            session = px.launch_app()
+            tracer_provider = register(project_name="Onlab", auto_instrument=True)
+            LangChainInstrumentor().instrument(tracer_provider=tracer_provider)
 
             webbrowser.open(session.url)
 

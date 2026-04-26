@@ -1,8 +1,6 @@
-import streamlit as st
-from database_manager import (
-    create_form, update_campaign, delete_campaign,
-    get_campaign_by_id, get_forms_by_campaign, delete_form
-)
+
+from Database.campaign import delete_campaign, get_campaign_by_id, update_campaign
+from Database.forms import create_form, delete_form, get_forms_by_campaign
 
 
 class Campaign:

@@ -2,12 +2,13 @@ import streamlit as st
 import random
 import uuid
 import difflib
-from database_manager import(
-    generate_user_token, get_all_employees, get_all_form_templates, get_all_groups, 
-    add_form_assignments, get_forms_by_campaign, create_form_from_template
-)
+
 from utils.Campaigns.email_sender import email_sender
 from utils.common import set_state
+from Database.groups_positions import get_all_groups
+from Database.employee import get_all_employees
+from Database.forms import get_forms_by_campaign, get_all_form_templates, create_form_from_template
+from Database.form_response import add_form_assignments
 
 def show_assign_group(campaign_id):
     """Show the view to assign a group to a campaign."""

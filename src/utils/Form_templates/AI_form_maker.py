@@ -4,10 +4,11 @@ from openinference.instrumentation.langchain import LangChainInstrumentor
 import webbrowser
 import os
 import json
-from database_manager import add_question, get_company_values
 from dotenv import load_dotenv, find_dotenv
 from classes.form_template_class import FormTemplate
 import streamlit as st
+from Database.form_response import get_company_values
+from Database.forms import add_question
 
 
 def use_AI_questions(form_id, form_name, form_desc, num_of_questions):

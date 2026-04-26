@@ -1,8 +1,7 @@
 import streamlit as st
-from database_manager import (
-    get_form_by_id, get_questions_by_form, get_response_answers, get_form_responses,
-    submit_form_response, assign_group_to_campaign
-)
+
+from Database.form_response import get_form_responses, get_response_answers, submit_form_response
+from Database.forms import get_form_by_id, get_questions_by_form
 
 
 class FormTemplate:

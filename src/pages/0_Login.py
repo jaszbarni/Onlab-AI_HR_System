@@ -1,11 +1,8 @@
 import streamlit as st
 import re
+from Database.login import authenticate_employee, has_employee_password, is_employee_registered
 from utils.common import setup_page
-from database_manager import (
-    authenticate_employee,
-    is_employee_registered,
-    has_employee_password,
-)
+
 from classes.user_class import User
 
 setup_page()
@@ -57,7 +54,7 @@ with col2:
             elif not has_employee_password(email) and password == "1234":
                 user = is_employee_registered(email)
                 # Get employee data for session
-                from database_manager import get_user_by_email
+                from Database.database_manager import get_user_by_email
                 employee_data = get_user_by_email(email)
                 if employee_data:
                     st.session_state.user = User(

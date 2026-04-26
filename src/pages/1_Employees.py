@@ -1,10 +1,9 @@
 import streamlit as st
+from Database.database_manager import check_permission, get_all_positions_with_permissions, get_all_positions
+from Database.employee import add_employee, get_all_employees, delete_employee
+from Database.groups_positions import add_group, add_position, delete_position, get_all_groups, remove_group_from_employee, update_position, add_group_to_employee, delete_group, update_employee_position
 from classes.user_class import User
-from database_manager import(
-    add_employee, get_all_employees, update_employee_position, check_permission, delete_employee, 
-    add_group_to_employee, remove_group_from_employee, get_all_groups, add_group, delete_group,
-    get_all_positions, add_position, delete_position, update_position, get_all_positions_with_permissions
-)
+
 from utils.common import check_email_format, delete_confirmation_dialog
 
 st.set_page_config(layout="wide", initial_sidebar_state="expanded")

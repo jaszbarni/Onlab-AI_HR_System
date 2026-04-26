@@ -2,8 +2,8 @@ import smtplib
 import os
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from Database.login import generate_user_token
 
-from database_manager import generate_user_token
 
 
 def email_sender(filler_employee):

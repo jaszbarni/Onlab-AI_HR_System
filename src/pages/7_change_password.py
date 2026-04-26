@@ -1,7 +1,8 @@
 import streamlit as st
+from Database.employee import get_user_by_email
+from Database.login import set_employee_password
 
-from database_manager import  set_employee_password, get_user_by_email
-
+ 
 st.subheader("Set Up Your Password")
 col1, col2, col3 = st.columns([1, 2.5, 1])
 

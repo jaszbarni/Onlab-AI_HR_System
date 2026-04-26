@@ -2,8 +2,9 @@ import streamlit as st
 from utils.common import setup_page, check_user_initialized, initialize_session_state
 from utils.Campaigns.campaigns_views import (
     show_campaigns_list, show_create_campaign, show_edit_campaign,
-    show_campaign_forms, show_edit_form, show_statistics
+    show_campaign_forms, show_edit_form
 )
+from utils.Campaigns.statistics import show_statistics
 from utils.Campaigns.matrix import show_assign_group
 
 # Setup
