@@ -1,12 +1,12 @@
 """Views for form template management."""
 import streamlit as st
 
-from classes.form_template_class import FormTemplate
+from classes.form_template_class import get_cached_form_template
 from utils.Form_templates.AI_form_maker import use_AI_questions
-from utils.common import get_user_name, delete_confirmation_dialog, set_state
-from Database.forms import delete_question, update_question, get_all_form_templates, delete_form, create_form, add_question, update_form
-from Database.database_manager import check_permission
-from Database.form_response import get_company_values, save_company_values
+from utils.common import get_user_name, delete_confirmation_dialog, set_state, invalidate_cache
+from Database.db_forms import delete_question, update_question, get_all_form_templates, delete_form, create_form, add_question, update_form
+from Database.db_database_manager import check_permission
+from Database.db_form_response import get_company_values, save_company_values
 
 
 def render_question_editor(question_id, question_text, question_description, question_type, min_val, max_val, form_id, is_closed=False):
@@ -52,26 +52,45 @@ def render_question_editor(question_id, question_text, question_description, que
     return False
 
 def show_templates_list():
-    """Display list of all form templates."""
+    """Display list of all form templates with pagination."""
+    
+    # Initialize pagination in session state
+    if "templates_page" not in st.session_state:
+        st.session_state.templates_page = 0
+    if "templates_cache" not in st.session_state:
+        st.session_state.templates_cache = None
+    
     col1, col2 = st.columns([0.6, 0.2])
     with col1:
         st.header("Form Templates", text_alignment="left")
     with col2:
         if st.button(label="Create Template", use_container_width=True, type="primary", disabled=not check_permission("create")):
+            st.session_state.templates_cache = None  # Invalidate cache
             set_state(forms_view="edit_template", current_form_id=None)
         elif st.button("Add company values for the AI", disabled=not check_permission("create")):
             company_values_dialog()
 
     st.divider()
 
-    templates = get_all_form_templates()
+    # Cache templates in session state
+    if st.session_state.templates_cache is None:
+        st.session_state.templates_cache = get_all_form_templates()
+    
+    templates = st.session_state.templates_cache
+    items_per_page = 10
 
     if not templates:
         st.info("No form templates created yet. Click 'Create Template' to create one.")
     else:
         st.subheader(f"Existing Templates ({len(templates)})")
         
-        for template in templates:
+        # Calculate pagination
+        start_idx = st.session_state.templates_page * items_per_page
+        end_idx = start_idx + items_per_page
+        paginated_templates = templates[start_idx:end_idx]
+        
+        # Display current page items
+        for template in paginated_templates:
             template_id, name, description = template[:3]
             
             with st.container(border=True):
@@ -89,6 +108,26 @@ def show_templates_list():
                 with col3:
                     if st.button("Delete", key=f"delete_{template_id}", use_container_width=True, disabled=not check_permission("delete")):
                         delete_confirmation_dialog("template", delete_form, template_id)
+        
+        # Pagination controls
+        st.divider()
+        col1, col2, col3 = st.columns([1, 2, 1])
+        
+        remaining = len(templates) - end_idx
+        with col1:
+            if st.session_state.templates_page > 0:
+                if st.button("← Previous", use_container_width=True):
+                    st.session_state.templates_page -= 1
+                    st.rerun()
+        
+        with col2:
+            st.markdown(f"<div style='text-align: center'>Showing {start_idx + 1}-{min(end_idx, len(templates))} of {len(templates)}</div>", unsafe_allow_html=True)
+        
+        with col3:
+            if remaining > 0:
+                if st.button(f"Next ({remaining} more) →", use_container_width=True):
+                    st.session_state.templates_page += 1
+                    st.rerun()
 
 def show_edit_template():
     """Edit a form template."""
@@ -120,7 +159,7 @@ def show_edit_template():
     else:
         if form_id:
             # Load and edit existing form
-            form = FormTemplate(form_id)
+            form = get_cached_form_template(form_id)
             form_info = form.get_form_info()
             
             if form_info:
@@ -144,7 +183,7 @@ def show_edit_template():
 
     # Questions Section (only for existing forms)
     if form_id:
-        form = FormTemplate(form_id)
+        form = get_cached_form_template(form_id)
         col1, col2 = st.columns([0.8, 0.2])
         with col1:
             st.subheader("Template Questions")

@@ -1,6 +1,6 @@
 import streamlit as st
 import re
-from Database.login import authenticate_employee, has_employee_password, is_employee_registered
+from Database.db_login import authenticate_employee, has_employee_password, is_employee_registered
 from utils.common import setup_page
 
 from classes.user_class import User
@@ -23,20 +23,19 @@ with col2:
     st.subheader("Login to Your Account")
     
     #TODO kiszedni
-    """ email = st.text_input(
+    email = st.text_input(
         "Email",
         placeholder="your.email@example.com",
         key="login_email"
-    ) """
-    email = "leader@example.com"
+    )
+    #email = "leader@example.com"
 
-    """ password = st.text_input(
+    password = st.text_input(
         "Password",
         type="password",
         key="login_password"
-    ) """
+    )
 
-    password = "asd"
     
     if st.button("Login", type="primary", use_container_width=True):
         email = email.strip().lower()
@@ -54,7 +53,7 @@ with col2:
             elif not has_employee_password(email) and password == "1234":
                 user = is_employee_registered(email)
                 # Get employee data for session
-                from Database.database_manager import get_user_by_email
+                from Database.db_database_manager import get_user_by_email
                 employee_data = get_user_by_email(email)
                 if employee_data:
                     st.session_state.user = User(

@@ -1,8 +1,6 @@
 
-from Database.database_manager import db_connection
+from Database.db_database_manager import db_connection
 import classes.user_class as User
-
-
 
 def add_employee(user: User):
     with db_connection() as cursor:
@@ -50,21 +48,6 @@ def get_all_employees():
         
         return employees
 
-def get_user_by_email(email):
-    """Retrieve a user by their email address."""
-    with db_connection() as cursor:
-        cursor.execute('SELECT id, first_name, last_name, email, position FROM employees WHERE email = ?', (email.lower(),))
-        row = cursor.fetchone()
-        if row:
-            return {
-                "id": row[0],
-                "first_name": row[1],
-                "last_name": row[2],
-                "email": row[3],
-                "position": row[4]
-            }
-        return None
-
 def delete_employee(employee_id):
     """Delete an employee from the database."""
     with db_connection() as cursor:
@@ -78,3 +61,40 @@ def delete_all_employees():
     with db_connection() as cursor:
         cursor.execute('DELETE FROM employee_groups')
         cursor.execute('DELETE FROM employees')
+
+def update_employee_email(employee_id, new_email):
+    """Update an employee's email in the database."""
+    try:
+        with db_connection() as cursor:
+            cursor.execute('UPDATE employees SET email = ? WHERE id = ?', (new_email, employee_id))
+        return True
+    except Exception as e:
+        print(f"Error updating employee email: {e}")
+        return False
+
+def update_employee_email_password(employee_id, new_password):
+    """Update an employee's email password in the database."""
+    try:
+        with db_connection() as cursor:
+            cursor.execute('UPDATE employees SET email_password = ? WHERE id = ?', (new_password, employee_id))
+        return True
+    except Exception as e:
+        print(f"Error updating employee email password: {e}")
+        return False
+
+def get_user_by_email(email):
+    """Retrieve a user by their email address."""
+    with db_connection() as cursor:
+        cursor.execute('SELECT id, first_name, last_name, email, position, password_hash, email_password FROM employees WHERE email = ?', (email.lower(),))
+        row = cursor.fetchone()
+        if row:
+            return {
+                "id": row[0],
+                "first_name": row[1],
+                "last_name": row[2],
+                "email": row[3],
+                "position": row[4],
+                "password_hash": row[5],
+                "email_password": row[6]
+            }
+        return None

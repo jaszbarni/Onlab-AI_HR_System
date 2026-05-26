@@ -1,18 +1,13 @@
 import streamlit as st
 from classes.user_class import User
-from Database.login import get_user_by_token, has_employee_password
-from Database.database_manager import check_permission
-
+from Database.db_login import get_user_by_token, has_employee_password
+from Database.db_database_manager import check_permission
+from utils.common import setup_page, get_user_permission_cached
 
 #TODO login
 
-st.set_page_config(layout="wide", initial_sidebar_state="expanded")
-
-try:
-    with open("Resources/style.css") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-except FileNotFoundError:
-    st.error("CSS file not found. Please make sure 'form.css' is in the same folder.")
+# Use optimized setup_page that caches CSS
+setup_page()
 
 # Hide the sidebar collapse/expand buttons to fix it open
 # Also hide the "Change Password" tab from the sidebar navigation
@@ -56,7 +51,7 @@ if "user" in st.session_state:
     pages.insert(0, st.Page("pages/4_Forms.py", title="Forms"))
 
     # Management pages require 'read' permission (Back office, Manager, Vezető)
-    if check_permission("read"):
+    if get_user_permission_cached("read"):
         pages.insert(0, st.Page("pages/6_AI_review.py", title="AI Review"))
         pages.insert(0, st.Page("pages/3_Form_Templates.py", title="Form Templates"))
         pages.insert(0, st.Page("pages/2_Campaigns.py", title="Campaigns"))

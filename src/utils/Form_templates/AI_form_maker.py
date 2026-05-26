@@ -7,8 +7,8 @@ import json
 from dotenv import load_dotenv, find_dotenv
 from classes.form_template_class import FormTemplate
 import streamlit as st
-from Database.form_response import get_company_values
-from Database.forms import add_question
+from Database.db_form_response import get_company_values
+from Database.db_forms import add_question
 
 
 def use_AI_questions(form_id, form_name, form_desc, num_of_questions):
@@ -18,8 +18,12 @@ def use_AI_questions(form_id, form_name, form_desc, num_of_questions):
     tracer_provider = register(project_name="Onlab", auto_instrument=True)
     LangChainInstrumentor().instrument(tracer_provider=tracer_provider)
     
-    webbrowser.open(session.url)
-
+    if "opened_urls" not in st.session_state:
+        st.session_state.opened_urls = set()
+    
+    if session.url not in st.session_state.opened_urls:
+        webbrowser.open(session.url)
+        st.session_state.opened_urls.add(session.url)
     comp_values = get_company_values()
 
     if not comp_values:

@@ -2,7 +2,7 @@
 import streamlit as st
 from classes.form_template_class import FormTemplate
 from utils.common import get_user_name, back_button, delete_confirmation_dialog, set_state
-from Database.forms import get_assignments_for_user_by_email, update_assignment_status
+from Database.db_forms import get_assignments_for_user_by_email, update_assignment_status
 
 
 def render_question_input(question_id, question_text, question_description, question_type, min_val, max_val):

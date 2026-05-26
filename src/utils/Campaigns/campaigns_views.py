@@ -1,11 +1,11 @@
 """Views for campaign and form management."""
 import streamlit as st
 
-from classes.form_template_class import FormTemplate
-from utils.common import get_user_name, back_button, delete_confirmation_dialog, set_state
-from Database.forms import delete_question, update_question, create_form_from_template, get_all_form_templates, get_forms_by_campaign, get_assignments_by_form, delete_form, create_form, add_question, update_form
-from Database.campaign import get_all_campaigns, create_campaign, get_campaign_by_id, update_campaign, update_campaign_status
-from Database.database_manager import check_permission
+from classes.form_template_class import get_cached_form_template
+from utils.common import get_user_name, back_button, delete_confirmation_dialog, set_state, invalidate_cache
+from Database.db_forms import delete_question, update_question, create_form_from_template, get_all_form_templates, get_forms_by_campaign, get_assignments_by_form, delete_form, create_form, add_question, update_form
+from Database.db_campaign import delete_campaign, get_all_campaigns, create_campaign, get_campaign_by_id, update_campaign, update_campaign_status
+from Database.db_database_manager import check_permission
 
 from utils.Campaigns.test_campaigns import generate_test_campaign
 
@@ -54,12 +54,18 @@ def render_question_editor(question_id, question_text, question_description, que
 
 
 def show_campaigns_list():
-    """Display list of all campaigns."""
-
+    """Display list of all campaigns with pagination."""
     
+    # Initialize pagination in session state
+    if "campaigns_page" not in st.session_state:
+        st.session_state.campaigns_page = 0
+    if "campaigns_cache" not in st.session_state:
+        st.session_state.campaigns_cache = None
+
     if st.button(label="Generate Test campaign", use_container_width=True, disabled=not check_permission("create")):
         with st.spinner("Generating test campaign..."):
             generate_test_campaign()
+        st.session_state.campaigns_cache = None  # Invalidate cache
         st.rerun()
 
     col1, col2 = st.columns([0.8, 0.2])
@@ -71,14 +77,25 @@ def show_campaigns_list():
 
     st.divider()
 
-    campaigns = get_all_campaigns()
+    # Cache campaigns in session state
+    if st.session_state.campaigns_cache is None:
+        st.session_state.campaigns_cache = get_all_campaigns()
+    
+    campaigns = st.session_state.campaigns_cache
+    items_per_page = 10
 
     if not campaigns:
         st.info("No campaigns created yet. Click 'Create Campaign' to create one.")
     else:
         st.subheader(f"Existing Campaigns ({len(campaigns)})")
         
-        for campaign in campaigns:
+        # Calculate pagination
+        start_idx = st.session_state.campaigns_page * items_per_page
+        end_idx = start_idx + items_per_page
+        paginated_campaigns = campaigns[start_idx:end_idx]
+        
+        # Display current page items
+        for campaign in paginated_campaigns:
             campaign_id, name, description, status = campaign
             
             with st.container(border=True):
@@ -101,6 +118,26 @@ def show_campaigns_list():
                 with col4:
                     if st.button("Delete", key=f"delete_campaign_{campaign_id}", use_container_width=True, disabled=not check_permission("delete")):
                         delete_confirmation_dialog("campaign", delete_campaign, campaign_id)
+        
+        # Pagination controls
+        st.divider()
+        col1, col2, col3 = st.columns([1, 2, 1])
+        
+        remaining = len(campaigns) - end_idx
+        with col1:
+            if st.session_state.campaigns_page > 0:
+                if st.button("← Previous", use_container_width=True):
+                    st.session_state.campaigns_page -= 1
+                    st.rerun()
+        
+        with col2:
+            st.markdown(f"<div style='text-align: center'>Showing {start_idx + 1}-{min(end_idx, len(campaigns))} of {len(campaigns)}</div>", unsafe_allow_html=True)
+        
+        with col3:
+            if remaining > 0:
+                if st.button(f"Next ({remaining} more) →", use_container_width=True):
+                    st.session_state.campaigns_page += 1
+                    st.rerun()
 
 
 def show_create_campaign():
@@ -348,7 +385,7 @@ def show_edit_form(campaign_id):
     else:
         if form_id:
             # Load and edit existing form
-            form = FormTemplate(form_id)
+            form = get_cached_form_template(form_id)
             form_info = form.get_form_info()
             
             if form_info:
@@ -372,7 +409,7 @@ def show_edit_form(campaign_id):
 
     # Questions Section (only for existing forms)
     if form_id:
-        form = FormTemplate(form_id)
+        form = get_cached_form_template(form_id)
         st.subheader("Form Questions")
 
         # Add new question section
@@ -457,7 +494,7 @@ def show_edit_view(view_key, form_id_key):
     else:
         if form_id:
             # Load and edit existing form
-            form = FormTemplate(form_id)
+            form = get_cached_form_template(form_id)
             form_info = form.get_form_info()
             
             if form_info:
@@ -483,7 +520,7 @@ def show_edit_view(view_key, form_id_key):
 
     # Questions Section (only for existing forms)
     if form_id:
-        form = FormTemplate(form_id)
+        form = get_cached_form_template(form_id)
         st.subheader("Form Questions")
 
         # Add new question section

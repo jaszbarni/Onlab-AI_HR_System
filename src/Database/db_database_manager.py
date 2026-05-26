@@ -69,7 +69,6 @@ def check_permission(permission):
         else:
             return False
     
-
 # --- Database Management ---
 
 def init_db():
@@ -264,6 +263,10 @@ def migrate_db():
             if "password_hash" not in columns:
                 cursor.execute("ALTER TABLE employees ADD COLUMN password_hash TEXT")
                 
+            # Add email_password column for sending emails
+            if "email_password" not in columns:
+                cursor.execute("ALTER TABLE employees ADD COLUMN email_password TEXT")
+
             # Check if created_date column exists in positions table
             cursor.execute("PRAGMA table_info(positions)")
             columns = [column[1] for column in cursor.fetchall()]

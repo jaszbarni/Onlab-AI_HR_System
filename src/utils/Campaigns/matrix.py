@@ -5,10 +5,10 @@ import difflib
 
 from utils.Campaigns.email_sender import email_sender
 from utils.common import set_state
-from Database.groups_positions import get_all_groups
-from Database.employee import get_all_employees
-from Database.forms import get_forms_by_campaign, get_all_form_templates, create_form_from_template
-from Database.form_response import add_form_assignments
+from Database.db_groups_positions import get_all_groups
+from Database.db_employee import get_all_employees
+from Database.db_forms import get_forms_by_campaign, get_all_form_templates, create_form_from_template
+from Database.db_form_response import add_form_assignments
 
 def show_assign_group(campaign_id):
     """Show the view to assign a group to a campaign."""
@@ -335,8 +335,8 @@ def show_assign_group(campaign_id):
                     if has_assigned_targets:
                         filler_emp_data = next((emp for emp in all_employees if f"{emp['first_name']} {emp['last_name']}" == filler_emp), None)
                         if filler_emp_data:
-                            email_sender(filler_emp_data)
-                            st.success("Email sent to selected employee(s)!")
+                            if email_sender(filler_emp_data):
+                                st.success("Email sent to selected employee(s)!")
                 
                 add_form_assignments(send_form)
                 st.session_state.send_form = send_form

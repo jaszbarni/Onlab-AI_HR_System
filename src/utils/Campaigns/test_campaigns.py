@@ -3,10 +3,10 @@ import streamlit as st
 
 from classes.form_template_class import FormTemplate
 from utils.common import get_user_name
-from Database.employee import get_all_employees
-from Database.forms import create_form, add_question, create_form_from_template, get_assignments_by_form, update_assignment_status
-from Database.campaign import create_campaign
-from Database.form_response import add_form_assignments
+from Database.db_employee import get_all_employees
+from Database.db_forms import create_form, add_question, create_form_from_template, get_assignments_by_form, update_assignment_status
+from Database.db_campaign import create_campaign
+from Database.db_form_response import add_form_assignments
 
 
 def generate_test_campaign():

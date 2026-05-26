@@ -1,21 +1,17 @@
 import streamlit as st
-from Database.database_manager import check_permission, get_all_positions_with_permissions, get_all_positions
-from Database.employee import add_employee, get_all_employees, delete_employee
-from Database.groups_positions import add_group, add_position, delete_position, get_all_groups, remove_group_from_employee, update_position, add_group_to_employee, delete_group, update_employee_position
+import time
+from Database.db_database_manager import check_permission, get_all_positions_with_permissions, get_all_positions
+from Database.db_employee import add_employee, get_all_employees, delete_employee, update_employee_email
+from Database.db_groups_positions import add_group, add_position, delete_position, get_all_groups, remove_group_from_employee, update_position, add_group_to_employee, delete_group, update_employee_position
 from classes.user_class import User
 
-from utils.common import check_email_format, delete_confirmation_dialog
+from utils.common import check_email_format, delete_confirmation_dialog, setup_page, check_user_initialized
 
-st.set_page_config(layout="wide", initial_sidebar_state="expanded")
+setup_page()
+check_user_initialized()
 
 if "view" not in st.session_state:
     st.session_state.view = "employees"
-
-try:
-    with open("Resources/style.css") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-except FileNotFoundError:
-    st.error("CSS file not found. Please make sure 'style.css' is in the same folder.")
 
 # Hide the sidebar collapse/expand buttons to fix it open
 st.markdown(
@@ -149,13 +145,42 @@ def position_manager():
                 
                 st.divider()
                 if st.button("Delete Position", key=f"delete_position_{position}", type="primary", use_container_width=True, disabled=not check_permission("delete")):
-                    delete_position(position)
+                    delete_confirmation_dialog("position", delete_position, position)
                     st.success(f"Position '{position}' deleted!")
                     st.rerun()
     else:
         st.info("No positions defined")
 
 
+# Dialog for editing employee email
+@st.dialog("Edit Employee Email")
+def edit_email_dialog(employee_id, employee_name, current_email):
+    st.write(f"Update email for **{employee_name}**")
+    
+    new_email = st.text_input(
+        "Email Address",
+        value=current_email,
+        placeholder="Enter new email",
+        label_visibility="collapsed"
+    )
+    
+    if st.button("Save"):
+        if not check_email_format(new_email):
+            st.error("Invalid email format")
+        elif new_email.strip() == current_email:
+            st.warning("Email is unchanged.")
+        elif new_email.strip():
+            update_employee_email(employee_id, new_email.strip())
+            
+            # If the user changed their own email, update the session state
+            if "user" in st.session_state and st.session_state.user.email == current_email:
+                st.session_state.user.email = new_email.strip()
+                
+            st.success("Email updated!")
+            time.sleep(1) 
+            st.rerun()
+        else:
+            st.error("Email cannot be empty.")
 
 # Dialog for editing employee groups
 @st.dialog("Edit Employee Groups")
@@ -246,7 +271,13 @@ if employees:
         with col2:
             st.write(f"**{employee['first_name']} {employee['last_name']}**")
         with col3:
-            st.write(employee['email'])
+            email_col, edit_col = st.columns([0.8, 0.2], vertical_alignment="center")
+            with email_col:
+                st.write(employee['email'])
+            with edit_col:
+                if check_permission("update"):
+                    if st.button("✏️", key=f"edit_email_btn_{employee['id']}", help="Edit email"):
+                        edit_email_dialog(employee['id'], f"{employee['first_name']} {employee['last_name']}", employee['email'])
         with col4:
             with st.container(border=True):
                 if employee['groups']:

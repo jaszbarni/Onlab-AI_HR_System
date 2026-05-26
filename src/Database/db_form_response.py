@@ -1,4 +1,4 @@
-from Database.database_manager import db_connection
+from Database.db_database_manager import db_connection
 from datetime import datetime
 
 def submit_form_response(form_id, answers_dict, submitted_by):
@@ -75,6 +75,56 @@ def get_evaluations_for_employee(employee_id):
             JOIN employees e ON fa.filler_employee_id = e.id
             WHERE fa.target_employee_id = ? AND fa.status = 'completed'
         """, (employee_id,))
+        
+        assignments = cursor.fetchall()
+        
+        evaluations = []
+        for form_id, form_name, filler_name in assignments:
+            cursor.execute("""
+                SELECT id, submitted_date FROM form_responses 
+                WHERE form_id = ? AND submitted_by = ?
+                ORDER BY submitted_date DESC LIMIT 1
+            """, (form_id, filler_name))
+            response_row = cursor.fetchone()
+            
+            if response_row:
+                response_id = response_row[0]
+                submitted_date = response_row[1]
+                cursor.execute("""
+                    SELECT q.question_text, q.question_type, ra.answer 
+                    FROM response_answers ra
+                    JOIN questions q ON ra.question_id = q.id
+                    WHERE ra.response_id = ?
+                    ORDER BY q.question_order
+                """, (response_id,))
+                
+                answers = cursor.fetchall()
+                formatted_answers = [{"question": row[0], "type": row[1], "answer": row[2]} for row in answers]
+                
+                evaluations.append({
+                    "form_name": form_name,
+                    "evaluator": filler_name,
+                    "submitted_date": submitted_date,
+                    "answers": formatted_answers
+                })
+                
+        return evaluations
+
+def get_employee_evaluation_for_campaign(employee_id, campaign_id):
+    """Get all submitted form responses and answers for a specific campaign for a specific employee."""
+    with db_connection() as cursor:
+        cursor.execute("SELECT first_name, last_name FROM employees WHERE id = ?", (employee_id,))
+        emp = cursor.fetchone()
+        if not emp:
+            return []
+
+        cursor.execute("""
+            SELECT fa.form_id, f.name AS form_name, e.first_name || ' ' || e.last_name AS filler_name
+            FROM form_assignments fa
+            JOIN forms f ON fa.form_id = f.id
+            JOIN employees e ON fa.filler_employee_id = e.id
+            WHERE fa.target_employee_id = ? AND f.campaign_id = ? AND fa.status = 'completed'
+        """, (employee_id, campaign_id))
         
         assignments = cursor.fetchall()
         

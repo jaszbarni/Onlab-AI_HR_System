@@ -1,4 +1,5 @@
-from Database.database_manager import db_connection
+import streamlit as st
+from Database.db_database_manager import db_connection
 
 
 def create_form(name, description, created_by, campaign_id=None, is_template=True):
@@ -43,6 +44,7 @@ def create_form_from_template(template_id, campaign_id, created_by):
         
         return new_form_id
 
+@st.cache_data(ttl=300)
 def get_all_form_templates():
     """Get all form templates."""
     with db_connection() as cursor:
@@ -50,6 +52,7 @@ def get_all_form_templates():
         forms = cursor.fetchall()
         return forms
 
+@st.cache_data(ttl=300)
 def get_all_forms():
     """Get all forms that are not templates."""
     with db_connection() as cursor:
@@ -81,6 +84,7 @@ def get_forms_for_user_by_email(email):
         return forms
 
 
+@st.cache_data(ttl=300)
 def get_forms_by_campaign(campaign_id):
     """Get all forms for a specific campaign."""
     with db_connection() as cursor:
@@ -115,6 +119,7 @@ def get_assignments_for_user_by_email(email):
         
         return cursor.fetchall()
 
+@st.cache_data(ttl=300)
 def get_assignments_by_form(form_id):
     """Get all form assignments for a specific form, including employee names."""
     with db_connection() as cursor:
@@ -140,6 +145,7 @@ def delete_all_assignments():
     with db_connection() as cursor:
         cursor.execute('DELETE FROM form_assignments')
 
+@st.cache_data(ttl=3600)
 def get_form_by_id(form_id):
     """Get a specific form by ID."""
     with db_connection() as cursor:
@@ -177,6 +183,7 @@ def add_question(form_id, question_text, question_description, question_type, mi
         question_id = cursor.lastrowid
         return question_id
 
+@st.cache_data(ttl=3600)
 def get_questions_by_form(form_id):
     """Get all questions for a form."""
     with db_connection() as cursor:

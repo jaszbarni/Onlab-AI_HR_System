@@ -1,7 +1,20 @@
 import streamlit as st
 
-from Database.form_response import get_form_responses, get_response_answers, submit_form_response
-from Database.forms import get_form_by_id, get_questions_by_form
+from Database.db_form_response import get_form_responses, get_response_answers, submit_form_response
+from Database.db_forms import get_form_by_id, get_questions_by_form
+
+
+@st.cache_resource
+def get_cached_form_template(form_id):
+    """Get a cached FormTemplate instance.
+    
+    Args:
+        form_id: The ID of the form to load
+        
+    Returns:
+        FormTemplate: A cached FormTemplate instance
+    """
+    return FormTemplate(form_id)
 
 
 class FormTemplate:

@@ -1,4 +1,5 @@
-from Database.database_manager import db_connection
+import streamlit as st
+from Database.db_database_manager import db_connection
 
 
 def create_campaign(name, description, created_by):
@@ -9,6 +10,7 @@ def create_campaign(name, description, created_by):
         campaign_id = cursor.lastrowid
         return campaign_id
 
+@st.cache_data(ttl=300)
 def get_all_campaigns():
     """Get all campaigns."""
     with db_connection() as cursor:
@@ -16,6 +18,7 @@ def get_all_campaigns():
         campaigns = cursor.fetchall()
         return campaigns
 
+@st.cache_data(ttl=3600)
 def get_campaign_by_id(campaign_id):
     """Get a specific campaign by ID."""
     with db_connection() as cursor:

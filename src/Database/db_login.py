@@ -1,7 +1,6 @@
-from Database.database_manager import db_connection
+from Database.db_database_manager import db_connection
 import classes.user_class as User
 import uuid
-import bcrypt
 
 def generate_user_token(employee_id):
     """Generate and save a new login token for an employee."""
@@ -10,23 +9,12 @@ def generate_user_token(employee_id):
         cursor.execute('UPDATE employees SET login_token = ? WHERE id = ?', (token, employee_id))
     return token
 
-def hash_password(password: str) -> str:
-    """Hash a password using bcrypt (rounds=12)."""
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
-
-def verify_password(password: str, password_hash: str) -> bool:
-    """Verify a password against its bcrypt hash."""
-    try:
-        return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
-    except Exception:
-        return False
-
 def set_employee_password(employee_id: int, password: str) -> bool:
     """Set or update password for an employee."""
     try:
-        password_hash = hash_password(password)
+        # Storing password in plain text. The 'password_hash' column will contain the plain text password.
         with db_connection() as cursor:
-            cursor.execute('UPDATE employees SET password_hash = ? WHERE id = ?', (password_hash, employee_id))
+            cursor.execute('UPDATE employees SET password_hash = ? WHERE id = ?', (password, employee_id))
         return True
     except Exception as e:
         print(f"Error setting password: {e}")
@@ -42,8 +30,9 @@ def authenticate_employee(email: str, password: str):
         )
         row = cursor.fetchone()
         
-        if row and row[5]:  # Check if password_hash exists
-            if verify_password(password, row[5]):
+        # The password_hash column now stores plain text passwords.
+        if row and row[5]:  # Check if a password exists
+            if password == row[5]:
                 return User.User(row[1], row[2], row[3], row[4])  # Return User object
         
     return None

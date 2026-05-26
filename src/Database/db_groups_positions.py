@@ -1,4 +1,4 @@
-from Database.database_manager import db_connection
+from Database.db_database_manager import db_connection
 
 def get_all_groups():
     """Get all available groups."""

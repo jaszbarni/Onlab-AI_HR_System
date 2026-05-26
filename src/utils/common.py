@@ -4,14 +4,29 @@ import re
 import streamlit as st
 
 
+@st.cache_data
+def load_css():
+    """Load CSS once and cache it."""
+    try:
+        with open("Resources/style.css") as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+
+
+def invalidate_cache():
+    """Clear Streamlit cache when data is modified."""
+    st.cache_data.clear()
+
+
 def setup_page():
     """Initialize page configuration and styling."""
     st.set_page_config(layout="wide", initial_sidebar_state="expanded")
     
-    try:
-        with open("Resources/style.css") as f:
-            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-    except FileNotFoundError:
+    css_content = load_css()
+    if css_content:
+        st.markdown(f"<style>{css_content}</style>", unsafe_allow_html=True)
+    else:
         st.error("CSS file not found. Please make sure 'style.css' is in the same folder.")
 
     # Hide the sidebar collapse/expand buttons to fix it open
@@ -48,6 +63,26 @@ def set_state(**kwargs):
 def get_user_name():
     """Get full name of current user."""
     return f"{st.session_state.user.first_name} {st.session_state.user.last_name}"
+
+
+def get_user_permission_cached(permission):
+    """Check permission with session-level caching (avoids repeated DB queries).
+    
+    Args:
+        permission: The permission to check (e.g., 'read', 'create', 'update', 'delete')
+        
+    Returns:
+        bool: True if user has the permission, False otherwise
+    """
+    # Use session state cache for permission checks
+    cache_key = f"_perm_{permission}"
+    
+    if cache_key not in st.session_state:
+        # Import here to avoid circular imports
+        from Database.db_database_manager import check_permission
+        st.session_state[cache_key] = check_permission(permission)
+    
+    return st.session_state[cache_key]
 
 
 def initialize_session_state(*keys):

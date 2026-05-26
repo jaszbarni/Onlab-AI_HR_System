@@ -4,7 +4,7 @@ import pandas as pd
 import altair as alt
 from utils.common import set_state
 from classes.form_template_class import FormTemplate
-from Database.forms import get_forms_by_campaign, get_assignments_by_form
+from Database.db_forms import get_forms_by_campaign, get_assignments_by_form
 
 
 def show_statistics():
